@@ -1,0 +1,203 @@
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+:root {
+  font-size: var(--text-size, 14px);
+}
+
+html,
+body {
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-font-family);
+}
+
+body {
+  overflow: auto;
+}
+
+#outline-panel {
+  position: fixed;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 15rem;
+  overflow: auto;
+  padding: 1rem 0.75rem;
+  border-right: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground));
+}
+
+#outline-panel h2 {
+  margin: 0 0 0.75rem;
+  padding: 0 0.5rem;
+  color: var(--vscode-sideBarTitle-foreground, var(--vscode-editor-foreground));
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+#outline-list {
+  display: grid;
+  gap: 0.125rem;
+}
+
+#outline-list .outline-item {
+  overflow: hidden;
+  padding: 0.3rem 0.5rem 0.3rem calc(0.5rem + (var(--heading-level) - 1) * 0.65rem);
+  border: 0;
+  border-radius: 0.2rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+#outline-list .outline-item:hover,
+#outline-list .outline-item:focus-visible {
+  background: var(--vscode-list-hoverBackground);
+  outline: none;
+}
+
+#outline-list .outline-empty {
+  margin: 0;
+  padding: 0.3rem 0.5rem;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9rem;
+}
+
+#mode-toolbar {
+  position: fixed;
+  z-index: 10;
+  top: 0.75rem;
+  right: 1rem;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--vscode-panel-border, transparent);
+  border-radius: 0.4rem;
+  background: var(--vscode-editor-background);
+}
+
+#mode-toolbar button {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--vscode-editor-foreground));
+  cursor: pointer;
+}
+
+#mode-toolbar button:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+#mode-toolbar button[aria-pressed='true'] {
+  border-color: var(--vscode-focusBorder);
+  background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground));
+}
+
+#mode-toolbar button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: 1px;
+}
+
+#mode-toolbar svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+#editor {
+  --prose-width: min(72vw, 1200px);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 100vh;
+  margin-left: 15rem;
+  padding: 3.5rem max(1.5rem, calc((100vw - var(--prose-width)) / 2)) 2rem;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-size: 1rem;
+}
+
+#editor .milkdown {
+  max-width: var(--prose-width);
+  margin: 0 auto;
+  color: var(--vscode-editor-foreground);
+}
+
+#editor .ProseMirror,
+#editor .ProseMirror * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+
+#editor[data-editable='true'] .ProseMirror {
+  cursor: text;
+  caret-color: var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground));
+}
+
+#editor[data-editable='true'] .ProseMirror p,
+#editor[data-editable='true'] .ProseMirror h1,
+#editor[data-editable='true'] .ProseMirror h2,
+#editor[data-editable='true'] .ProseMirror h3,
+#editor[data-editable='true'] .ProseMirror h4,
+#editor[data-editable='true'] .ProseMirror h5,
+#editor[data-editable='true'] .ProseMirror h6,
+#editor[data-editable='true'] .ProseMirror li,
+#editor[data-editable='true'] .ProseMirror blockquote,
+#editor[data-editable='true'] .ProseMirror td,
+#editor[data-editable='true'] .ProseMirror th,
+#editor[data-editable='true'] .ProseMirror pre {
+  cursor: text;
+}
+
+#editor .editor-error {
+  max-width: 52rem;
+  margin: 3rem auto;
+  color: var(--vscode-errorForeground);
+  white-space: pre-wrap;
+}
+
+#editor img {
+  max-width: 100%;
+}
+
+#editor pre,
+#editor code {
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+
+@media (max-width: 700px) {
+  #outline-panel {
+    width: 11rem;
+  }
+
+  #editor {
+    margin-left: 11rem;
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+}

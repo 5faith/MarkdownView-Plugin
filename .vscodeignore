@@ -1,0 +1,17 @@
+.gitignore
+.vscode/**
+.vscode-test/**
+.github/**
+AGENTS.md
+prd/**
+src/**
+**/*.ts
+**/*.map
+esbuild.cjs
+tsconfig.json
+package-lock.json
+pnpm-lock.yaml
+pnpm-workspace.yaml
+node_modules/**
+coverage/**
+examples/**

@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "shell",
+      "command": "pnpm run compile",
+      "problemMatcher": "$esbuild",
+      "label": "pnpm: compile",
+      "detail": "Bundle the extension host and Milkdown webview."
+    }
+  ]
+}
