@@ -4,6 +4,7 @@ import { InitReady, remarkPluginsCtx } from '@milkdown/kit/core';
 import { $nodeSchema, $remark, $view } from '@milkdown/kit/utils';
 import type { RemarkPlugin } from '@milkdown/kit/transformer';
 import type { ThemeKind } from '../shared/protocol';
+import { translateUsecaseDiagram } from './usecase-diagram';
 
 let diagramId = 0;
 let mermaidTheme: ThemeKind = 'light';
@@ -488,7 +489,10 @@ const mermaidDiagramView = $view(mermaidDiagramSchema.node, () => (node) => {
         theme: mermaidTheme === 'dark' ? 'dark' : 'default',
         flowchart: { htmlLabels: false },
       });
-      return mermaid.render(`markdownview-diagram-${++diagramId}`, source);
+      return mermaid.render(
+        `markdownview-diagram-${++diagramId}`,
+        translateUsecaseDiagram(source) ?? source,
+      );
     }).then(({ svg }) => {
       if (!destroyed && version === renderVersion) {
         preview.innerHTML = svg;

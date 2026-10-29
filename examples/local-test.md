@@ -496,6 +496,8 @@ wardley-beta
 
 #### 用例图
 
+兼容渲染 `usecase-beta` 示例语法；图表内部会转换为 Mermaid 流程图呈现，文档中的原始语法保持不变。
+
 ```mermaid
 usecase-beta
 actor User("用户")

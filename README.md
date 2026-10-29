@@ -23,6 +23,7 @@ MarkdownView 是一个面向 VS Code 的轻量级 Markdown 所见即所得查看
 │   ├── main.ts       # Milkdown 初始化、编辑和消息处理
 │   ├── markdown-extensions.ts # 告警、定义列表和 Mermaid 扩展
 │   ├── mermaid-runtime.ts # 按需加载的 Mermaid 运行时入口
+│   ├── usecase-diagram.ts # usecase-beta 到 Mermaid flowchart 的兼容转换
 │   └── style.css     # Webview 编辑画布样式
 ├── esbuild.cjs           # 扩展宿主与 Webview 的构建配置
 ├── package.json          # 扩展清单、依赖及 pnpm 命令
