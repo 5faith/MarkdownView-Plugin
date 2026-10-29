@@ -67,7 +67,9 @@
     "@codemirror/view": "^6.43.15",
     "@milkdown/crepe": "7.22.3",
     "@milkdown/kit": "7.22.3",
-    "@xz-summer/milkdown-container": "0.1.10"
+    "@xz-summer/milkdown-container": "0.1.10",
+    "mermaid": "^11.17.2",
+    "remark-definition-list": "^2.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",

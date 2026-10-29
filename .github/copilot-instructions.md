@@ -2,7 +2,7 @@
 
 ## Architecture
 
-The extension is a TypeScript VS Code `CustomTextEditorProvider` with a Milkdown Crepe webview. The extension host owns VS Code document edits, configuration/theme events, local resource URI conversion, and link opening; the webview owns the editable canvas. The VS Code `TextDocument` is the persisted source of truth. See the MVP contract in [the viewer requirement](../prd/20261026224114_vscode_milkdown_viewer/20261026224114_vscode_milkdown_viewer.md); [the original porting notes](../prd/vscode-md-viewer.md) describe the source desktop application and are background material.
+The extension is a TypeScript VS Code `CustomTextEditorProvider` with a Milkdown Crepe webview. The extension host owns VS Code document edits, configuration/theme events, local resource URI conversion, and link opening; the webview owns the editable canvas. The VS Code `TextDocument` is the persisted source of truth. See the MVP contract in [the viewer requirement](../prd/20261026/20261026_markdownview项目需求.md); [the original porting notes](../prd/20261026/20261026_vscode-md-viewer.md) describe the source desktop application and are background material.
 
 ## Build and validation
 

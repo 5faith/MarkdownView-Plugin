@@ -243,7 +243,7 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
       return;
     }
 
-    if (target.scheme === 'http' || target.scheme === 'https') {
+    if (target.scheme === 'http' || target.scheme === 'https' || target.scheme === 'mailto') {
       void vscode.env.openExternal(target).then(undefined, (error: unknown) => {
         const detail = error instanceof Error ? error.message : String(error);
         void vscode.window.showErrorMessage(`MarkdownView could not open this link: ${detail}`);
@@ -274,13 +274,14 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
   private getHtml(webview: vscode.Webview): string {
     const nonce = randomBytes(16).toString('base64');
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview.js'));
+    const mermaidUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'mermaid.js'));
     const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview.css'));
     const csp = [
       "default-src 'none'",
-      `img-src ${webview.cspSource} https: data:`,
+      `img-src ${webview.cspSource} https: http: data:`,
       `style-src ${webview.cspSource} 'unsafe-inline'`,
       `font-src ${webview.cspSource}`,
-      `script-src 'nonce-${nonce}'`,
+      `script-src ${webview.cspSource} 'nonce-${nonce}'`,
       "connect-src 'none'",
     ].join('; ');
     const escapeAttribute = (value: string): string =>
@@ -323,7 +324,7 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4zM13.5 6.5l4 4"></path></svg>
     </button>
   </nav>
-  <main id="editor" aria-label="Markdown editor"></main>
+  <main id="editor" aria-label="Markdown editor" data-mermaid-uri="${escapeAttribute(mermaidUri.toString())}"></main>
   <script nonce="${nonce}" src="${escapeAttribute(scriptUri.toString())}"></script>
 </body>
 </html>`;

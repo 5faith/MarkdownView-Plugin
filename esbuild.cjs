@@ -23,6 +23,7 @@ async function build() {
     outfile: 'dist/webview.js',
     platform: 'browser',
     format: 'iife',
+    minify: true,
     assetNames: 'assets/[name]-[hash]',
     loader: {
       '.css': 'css',
@@ -32,17 +33,27 @@ async function build() {
     },
     publicPath: './',
   };
+  const mermaid = {
+    ...shared,
+    entryPoints: ['src/webview/mermaid-runtime.ts'],
+    outfile: 'dist/mermaid.js',
+    platform: 'browser',
+    format: 'iife',
+    minify: true,
+    sourcemap: false,
+  };
 
   if (!watch) {
-    await Promise.all([esbuild.build(host), esbuild.build(webview)]);
+    await Promise.all([esbuild.build(host), esbuild.build(webview), esbuild.build(mermaid)]);
     return;
   }
 
-  const [hostContext, webviewContext] = await Promise.all([
+  const [hostContext, webviewContext, mermaidContext] = await Promise.all([
     esbuild.context(host),
     esbuild.context(webview),
+    esbuild.context(mermaid),
   ]);
-  await Promise.all([hostContext.watch(), webviewContext.watch()]);
+  await Promise.all([hostContext.watch(), webviewContext.watch(), mermaidContext.watch()]);
   console.log('Watching extension and webview sources.');
 }
 

@@ -154,6 +154,12 @@ body {
   user-select: text !important;
 }
 
+#editor .ProseMirror ::selection,
+#editor .ProseMirror *::selection {
+  background: var(--vscode-editor-selectionBackground, rgba(38, 79, 120, 0.65));
+  color: var(--vscode-editor-selectionForeground, var(--vscode-editor-foreground));
+}
+
 #editor[data-editable='true'] .ProseMirror {
   cursor: text;
   caret-color: var(--vscode-editorCursor-foreground, var(--vscode-editor-foreground));
@@ -183,6 +189,113 @@ body {
 
 #editor img {
   max-width: 100%;
+}
+
+#editor .milkdown-details,
+#editor .markdownview-details {
+  overflow: hidden;
+  border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+  border-radius: 0.35rem;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+
+#editor .milkdown-details-summary,
+#editor .markdownview-details > summary {
+  padding: 0.5rem 0.75rem;
+  color: var(--vscode-sideBarTitle-foreground, var(--vscode-editor-foreground));
+  cursor: pointer;
+}
+
+#editor .markdownview-details > :not(summary) {
+  margin-right: 0.75rem;
+  margin-left: 0.75rem;
+}
+
+#editor dl {
+  margin: 1rem 0;
+  padding-left: 1rem;
+  border-left: 2px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+}
+
+#editor dt {
+  margin-top: 0.75rem;
+  font-weight: 600;
+}
+
+#editor dd {
+  margin-left: 1rem;
+  color: var(--vscode-descriptionForeground, var(--vscode-editor-foreground));
+}
+
+#editor .milkdown-container {
+  border-radius: 0.35rem;
+}
+
+#editor .markdownview-alert {
+  margin: 1rem 0;
+  padding: 0.25rem 0.75rem;
+  border-left: 3px solid var(--vscode-focusBorder);
+  background: var(--vscode-textBlockQuote-background, transparent);
+}
+
+#editor .markdownview-alert-note {
+  border-color: var(--vscode-notificationsInfoIcon-foreground, var(--vscode-focusBorder));
+}
+
+#editor .markdownview-alert-tip {
+  border-color: var(--vscode-testing-iconPassed, var(--vscode-focusBorder));
+}
+
+#editor .markdownview-alert-important {
+  border-color: var(--vscode-symbolIcon-functionForeground, var(--vscode-focusBorder));
+}
+
+#editor .markdownview-alert-warning {
+  border-color: var(--vscode-editorWarning-foreground, var(--vscode-focusBorder));
+}
+
+#editor .markdownview-alert-caution {
+  border-color: var(--vscode-editorError-foreground, var(--vscode-focusBorder));
+}
+
+#editor .mermaid-diagram {
+  margin: 1rem 0;
+  border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+  border-radius: 0.35rem;
+  background: var(--vscode-editor-background);
+}
+
+#editor .mermaid-diagram-preview {
+  overflow-x: auto;
+  padding: 1rem;
+  text-align: center;
+}
+
+#editor .mermaid-diagram-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+#editor .mermaid-diagram-source {
+  border-top: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
+}
+
+#editor .mermaid-diagram-source summary {
+  padding: 0.4rem 0.75rem;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+#editor .mermaid-diagram-source pre {
+  margin: 0;
+  padding: 0.75rem;
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  text-align: left;
+}
+
+#editor .mermaid-diagram-error {
+  color: var(--vscode-errorForeground);
+  white-space: pre-wrap;
 }
 
 #editor pre,

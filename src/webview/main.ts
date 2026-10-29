@@ -3,6 +3,7 @@ import { Crepe } from '@milkdown/crepe';
 import { editorViewCtx } from '@milkdown/kit/core';
 import { replaceAll } from '@milkdown/kit/utils';
 import { containerPlugin } from '@xz-summer/milkdown-container';
+import { configureMermaid, markdownSyntaxPlugins } from './markdown-extensions';
 import '@milkdown/crepe/theme/common/style.css';
 import '@xz-summer/milkdown-container/style.css';
 import './style.css';
@@ -124,6 +125,7 @@ async function createEditor(): Promise<void> {
   root.dataset.theme = theme;
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.setProperty('--text-size', `${fontSize}px`);
+  configureMermaid(theme);
 
   const initialMarkdown = latestMarkdown;
   const nextEditor = new Crepe({
@@ -134,7 +136,6 @@ async function createEditor(): Promise<void> {
       [Crepe.Feature.Toolbar]: false,
       [Crepe.Feature.Placeholder]: false,
       [Crepe.Feature.LinkTooltip]: false,
-      [Crepe.Feature.Latex]: false,
       [Crepe.Feature.TopBar]: false,
       [Crepe.Feature.AI]: false,
     },
@@ -170,7 +171,7 @@ async function createEditor(): Promise<void> {
     },
   });
   nextEditor.addFeature((editor) => {
-    editor.use(containerPlugin);
+    editor.use([...containerPlugin, ...markdownSyntaxPlugins]);
   });
   nextEditor.on((listener) => {
     listener.markdownUpdated((_context, markdown) => postChange(markdown));
