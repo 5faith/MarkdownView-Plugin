@@ -1,13 +1,34 @@
 import { EditorView } from '@codemirror/view';
 import { Crepe } from '@milkdown/crepe';
-import { editorViewCtx } from '@milkdown/kit/core';
-import { replaceAll } from '@milkdown/kit/utils';
+import type { Ctx } from '@milkdown/kit/ctx';
+import { commandsCtx, editorViewCtx } from '@milkdown/kit/core';
+import { TextSelection } from '@milkdown/kit/prose/state';
+import {
+  createCodeBlockCommand,
+  headingSchema,
+  insertHrCommand,
+  insertImageCommand,
+  paragraphSchema,
+  setBlockTypeCommand,
+  toggleEmphasisCommand,
+  toggleInlineCodeCommand,
+  toggleStrongCommand,
+  toggleLinkCommand,
+  wrapInBlockquoteCommand,
+  wrapInBulletListCommand,
+  wrapInOrderedListCommand,
+} from '@milkdown/kit/preset/commonmark';
+import {
+  insertTableCommand,
+  toggleStrikethroughCommand,
+} from '@milkdown/kit/preset/gfm';
+import { callCommand, insert, replaceAll } from '@milkdown/kit/utils';
 import { containerPlugin } from '@xz-summer/milkdown-container';
 import { configureMermaid, markdownSyntaxPlugins } from './markdown-extensions';
 import '@milkdown/crepe/theme/common/style.css';
 import '@xz-summer/milkdown-container/style.css';
 import './style.css';
-import type { HostMessage, ThemeKind, WebviewMessage } from '../shared/protocol';
+import type { EditorMode, HostMessage, ThemeKind, WebviewMessage } from '../shared/protocol';
 
 declare function acquireVsCodeApi(): {
   postMessage(message: WebviewMessage): void;
@@ -26,16 +47,11 @@ let latestImages: Record<string, string> = {};
 let lastAppliedMarkdown: string | undefined;
 let theme: ThemeKind = 'light';
 let fontSize = 14;
-let editable = false;
+let mode: EditorMode = 'readonly';
 let changeTimer: number | undefined;
 let editorTask: Promise<void> = Promise.resolve();
-function requireButton(selector: string): HTMLButtonElement {
-  const button = document.querySelector<HTMLButtonElement>(selector);
-  if (!button) {
-    throw new Error(`MarkdownView mode control was not found: ${selector}`);
-  }
-  return button;
-}
+let sourceEntryMarkdown: string | undefined;
+let sourceTransitionId = 0;
 
 function requireElement(selector: string): HTMLElement {
   const element = document.querySelector<HTMLElement>(selector);
@@ -45,64 +61,524 @@ function requireElement(selector: string): HTMLElement {
   return element;
 }
 
-const readonlyButton = requireButton('#readonly-mode');
-const editButton = requireButton('#edit-mode');
+const modeButtons = [...document.querySelectorAll<HTMLButtonElement>('#mode-toolbar [data-mode]')];
+if (modeButtons.length !== 3) {
+  throw new Error('MarkdownView requires read-only, edit, and source mode controls.');
+}
+const editToolbar = requireElement('#edit-toolbar');
+const sourceEditorElement = document.querySelector<HTMLTextAreaElement>('#source-editor');
+if (!sourceEditorElement) {
+  throw new Error('MarkdownView source editor was not found.');
+}
+const sourceEditor: HTMLTextAreaElement = sourceEditorElement;
+const listFormat = document.querySelector<HTMLSelectElement>('#list-format');
+const inputDialog = document.querySelector<HTMLDialogElement>('#toolbar-input-dialog');
+const inputDialogLabel = document.querySelector<HTMLLabelElement>('#toolbar-input-label');
+const inputDialogField = document.querySelector<HTMLInputElement>('#toolbar-input');
 const outlineList = requireElement('#outline-list');
+const outlinePanel = requireElement('#outline-panel');
+const sourceTransitionLoading = requireElement('#source-transition-loading');
+const outlineResizerElement = document.querySelector<HTMLButtonElement>('#outline-resizer');
+if (!outlineResizerElement) {
+  throw new Error('MarkdownView outline resizer was not found.');
+}
+const outlineResizer: HTMLButtonElement = outlineResizerElement;
+const blockInsertMenu = requireElement('#block-insert-menu');
+let blockInsertPosition: number | undefined;
 
-function updateModeControls(): void {
-  readonlyButton.setAttribute('aria-pressed', String(!editable));
-  editButton.setAttribute('aria-pressed', String(editable));
-  root.dataset.editable = String(editable);
-  crepe?.setReadonly(!editable);
+function getOutlineResizeBounds(): { min: number; max: number } {
+  const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return {
+    min: Math.min(12 * rem, window.innerWidth * 0.3),
+    max: Math.min(28 * rem, window.innerWidth * 0.45),
+  };
 }
 
-readonlyButton.addEventListener('click', () => {
-  editable = false;
-  updateModeControls();
-  vscode.postMessage({ type: 'setMode', editable: false });
+function setOutlineWidth(width: number): void {
+  const { min, max } = getOutlineResizeBounds();
+  const nextWidth = Math.round(Math.max(min, Math.min(width, max)));
+  document.documentElement.style.setProperty('--outline-width', `${nextWidth}px`);
+  outlineResizer.setAttribute('aria-valuemin', String(Math.round(min)));
+  outlineResizer.setAttribute('aria-valuemax', String(Math.round(max)));
+  outlineResizer.setAttribute('aria-valuenow', String(nextWidth));
+}
+
+setOutlineWidth(outlinePanel.getBoundingClientRect().width);
+window.addEventListener('resize', () => {
+  setOutlineWidth(outlinePanel.getBoundingClientRect().width);
 });
-editButton.addEventListener('click', () => {
-  editable = true;
-  updateModeControls();
-  crepe?.editor.action((ctx) => {
-    ctx.get(editorViewCtx).focus();
+
+let outlineResizeStartX: number | undefined;
+let outlineResizeStartWidth = 0;
+
+outlineResizer.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) {
+    return;
+  }
+  event.preventDefault();
+  outlineResizeStartX = event.clientX;
+  outlineResizeStartWidth = outlinePanel.getBoundingClientRect().width;
+  document.body.dataset.resizingOutline = 'true';
+  outlineResizer.setPointerCapture(event.pointerId);
+});
+
+outlineResizer.addEventListener('pointermove', (event) => {
+  if (outlineResizeStartX === undefined) {
+    return;
+  }
+  setOutlineWidth(outlineResizeStartWidth + event.clientX - outlineResizeStartX);
+});
+
+function stopOutlineResize(): void {
+  outlineResizeStartX = undefined;
+  delete document.body.dataset.resizingOutline;
+}
+
+outlineResizer.addEventListener('pointerup', stopOutlineResize);
+outlineResizer.addEventListener('pointercancel', stopOutlineResize);
+outlineResizer.addEventListener('keydown', (event) => {
+  const currentWidth = outlinePanel.getBoundingClientRect().width;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault();
+    setOutlineWidth(currentWidth + (event.key === 'ArrowRight' ? 16 : -16));
+  } else if (event.key === 'Home') {
+    event.preventDefault();
+    setOutlineWidth(0);
+  } else if (event.key === 'End') {
+    event.preventDefault();
+    setOutlineWidth(Number.MAX_SAFE_INTEGER);
+  }
+});
+
+function updateModeControls(): void {
+  modeButtons.forEach((button) => {
+    button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
   });
-  vscode.postMessage({ type: 'setMode', editable: true });
+  root.dataset.editable = String(mode === 'edit');
+  root.hidden = mode === 'source';
+  sourceEditor.hidden = mode !== 'source';
+  sourceEditor.readOnly = mode === 'readonly';
+  editToolbar.dataset.visible = String(mode === 'edit');
+  crepe?.setReadonly(mode !== 'edit');
+}
+
+function setSourceTransitionLoading(loading: boolean): number {
+  sourceTransitionId += 1;
+  sourceTransitionLoading.hidden = !loading;
+  root.setAttribute('aria-busy', String(loading));
+  return sourceTransitionId;
+}
+
+function finishSourceTransitionLoading(transitionId: number): void {
+  window.requestAnimationFrame(() => {
+    if (transitionId === sourceTransitionId) {
+      setSourceTransitionLoading(false);
+    }
+  });
+}
+
+function flushPendingChange(): void {
+  window.clearTimeout(changeTimer);
+  if (mode !== 'readonly' && latestMarkdown !== lastAppliedMarkdown) {
+    vscode.postMessage({ type: 'change', markdown: latestMarkdown });
+    lastAppliedMarkdown = latestMarkdown;
+  }
+}
+
+function changeMode(nextMode: EditorMode): void {
+  hideBlockInsertMenu();
+  if (mode === nextMode) {
+    return;
+  }
+  const previousMode = mode;
+  if (mode === 'edit') {
+    latestMarkdown = crepe?.getMarkdown() ?? latestMarkdown;
+    postChange(latestMarkdown);
+  } else if (mode === 'source') {
+    latestMarkdown = sourceEditor.value;
+    postChange(latestMarkdown);
+  }
+  flushPendingChange();
+
+  if (nextMode === 'source') {
+    sourceEditor.value = latestMarkdown;
+    sourceEntryMarkdown = latestMarkdown;
+  }
+
+  const sourceChanged = previousMode === 'source' &&
+    latestMarkdown !== sourceEntryMarkdown;
+  const markdownToApply = latestMarkdown;
+  mode = nextMode;
+  updateModeControls();
+
+  if (sourceChanged) {
+    sourceEntryMarkdown = undefined;
+    const transitionId = setSourceTransitionLoading(true);
+    // Let the target mode paint before synchronously parsing the Markdown into the rich editor.
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        if (mode === 'source' || latestMarkdown !== markdownToApply || !crepe) {
+          finishSourceTransitionLoading(transitionId);
+          return;
+        }
+        try {
+          crepe.editor.action(replaceAll(markdownToApply));
+          lastAppliedMarkdown = markdownToApply;
+          if (mode === 'edit') {
+            crepe.editor.action((ctx) => ctx.get(editorViewCtx).focus());
+          }
+        } catch (error) {
+          console.error('MarkdownView could not restore the rich editor from source mode.', error);
+        } finally {
+          finishSourceTransitionLoading(transitionId);
+        }
+      });
+    });
+  } else if (previousMode === 'source') {
+    sourceEntryMarkdown = undefined;
+    setSourceTransitionLoading(false);
+  }
+
+  if (mode === 'edit' && !sourceChanged) {
+    crepe?.editor.action((ctx) => ctx.get(editorViewCtx).focus());
+  } else if (mode === 'source') {
+    sourceEditor.focus();
+  }
+  vscode.postMessage({ type: 'setMode', mode });
+}
+
+function hideBlockInsertMenu(): void {
+  blockInsertMenu.hidden = true;
+  blockInsertPosition = undefined;
+}
+
+function showBlockInsertMenu(anchor: DOMRect): void {
+  blockInsertMenu.hidden = false;
+  const menuRect = blockInsertMenu.getBoundingClientRect();
+  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - menuRect.width - 8));
+  const top = anchor.bottom + menuRect.height + 8 <= window.innerHeight
+    ? anchor.bottom + 4
+    : Math.max(8, anchor.top - menuRect.height - 4);
+  blockInsertMenu.style.left = `${left}px`;
+  blockInsertMenu.style.top = `${top}px`;
+  blockInsertMenu.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+}
+
+function insertParagraphAfterPointer(event: PointerEvent): void {
+  if (mode !== 'edit' || !crepe) {
+    return;
+  }
+  const operationItem = event.target instanceof Element
+    ? event.target.closest<HTMLElement>('.milkdown-block-handle .operation-item')
+    : null;
+  const operationItems = operationItem?.parentElement?.querySelectorAll<HTMLElement>(':scope > .operation-item');
+  if (!operationItem || operationItems?.[0] !== operationItem) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  if (event.type !== 'pointerup') {
+    return;
+  }
+
+  const anchor = operationItem.getBoundingClientRect();
+  crepe.editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const editorRect = view.dom.getBoundingClientRect();
+    const pointerPosition = view.posAtCoords({
+      left: editorRect.left + editorRect.width / 2,
+      top: event.clientY,
+    })?.pos ?? view.state.selection.from;
+    const position = view.state.doc.resolve(pointerPosition);
+    const activeNode = position.node(1);
+    const insertPosition = position.before(1) + activeNode.nodeSize;
+    const transaction = view.state.tr.insert(
+      insertPosition,
+      paragraphSchema.type(ctx).create(),
+    );
+    const selection = TextSelection.near(transaction.doc.resolve(insertPosition + 1));
+    view.dispatch(transaction.setSelection(selection).scrollIntoView());
+    blockInsertPosition = selection.from;
+    view.focus();
+  });
+  showBlockInsertMenu(anchor);
+}
+
+root.addEventListener('pointerdown', insertParagraphAfterPointer, true);
+root.addEventListener('pointerup', insertParagraphAfterPointer, true);
+
+blockInsertMenu.addEventListener('mousedown', (event) => {
+  if (event.target instanceof Element && event.target.closest('[role="menuitem"]')) {
+    event.preventDefault();
+  }
+});
+blockInsertMenu.addEventListener('click', (event) => {
+  const button = event.target instanceof Element
+    ? event.target.closest<HTMLButtonElement>('[data-insert]')
+    : null;
+  if (!button || mode !== 'edit') {
+    return;
+  }
+
+  const action = button.dataset.insert ?? '';
+  const insertionPosition = blockInsertPosition;
+  hideBlockInsertMenu();
+  if (insertionPosition !== undefined) {
+    crepe?.editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      view.focus();
+      const position = Math.min(insertionPosition, view.state.doc.content.size);
+      const selection = TextSelection.near(view.state.doc.resolve(position));
+      view.dispatch(view.state.tr.setSelection(selection));
+    });
+  }
+
+  switch (action) {
+    case 'paragraph':
+      crepe?.editor.action((ctx) => {
+        ctx.get(commandsCtx).call(setBlockTypeCommand.key, {
+          nodeType: paragraphSchema.type(ctx),
+        });
+      });
+      break;
+    case 'heading-1':
+    case 'heading-2':
+    case 'heading-3':
+    case 'heading-4':
+    case 'heading-5':
+    case 'heading-6':
+      crepe?.editor.action((ctx) => {
+        ctx.get(commandsCtx).call(setBlockTypeCommand.key, {
+          nodeType: headingSchema.type(ctx),
+          attrs: { level: Number(action.slice(-1)) },
+        });
+      });
+      break;
+    case 'quote':
+      runCommand(callCommand(wrapInBlockquoteCommand.key));
+      break;
+    case 'bullet-list':
+      runCommand(callCommand(wrapInBulletListCommand.key));
+      break;
+    case 'ordered-list':
+      runCommand(callCommand(wrapInOrderedListCommand.key));
+      break;
+    case 'task-list':
+      runInsertion('- [ ] 任务内容');
+      break;
+    case 'definition-list':
+      runInsertion('术语\n: 定义内容');
+      break;
+    case 'divider':
+      runCommand(callCommand(insertHrCommand.key));
+      break;
+    case 'table':
+      runCommand(callCommand(insertTableCommand.key, { row: 2, col: 2 }));
+      break;
+    case 'code-block':
+      runCommand(callCommand(createCodeBlockCommand.key));
+      break;
+    case 'details':
+      runInsertion('<details>\n<summary>折叠内容</summary>\n\n在此输入内容。\n\n</details>');
+      break;
+  }
+  crepe?.editor.action((ctx) => ctx.get(editorViewCtx).focus());
+});
+
+document.addEventListener('pointerdown', (event) => {
+  if (!(event.target instanceof Node) || blockInsertMenu.contains(event.target)) {
+    return;
+  }
+  hideBlockInsertMenu();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !blockInsertMenu.hidden) {
+    hideBlockInsertMenu();
+    crepe?.editor.action((ctx) => ctx.get(editorViewCtx).focus());
+  }
+});
+
+function runCommand(action: (ctx: Ctx) => boolean): void {
+  crepe?.editor.action(action);
+}
+
+function runInsertion(markdown: string): void {
+  crepe?.editor.action(insert(markdown));
+}
+
+function requestValue(label: string, value = '', required = true): Promise<string | null> {
+  if (!inputDialog || !inputDialogLabel || !inputDialogField) {
+    throw new Error('MarkdownView toolbar input dialog is unavailable.');
+  }
+  inputDialogLabel.textContent = label;
+  inputDialogField.value = value;
+  inputDialogField.required = required;
+  return new Promise((resolve) => {
+    inputDialog.addEventListener('close', () => {
+      resolve(inputDialog.returnValue === 'confirm' ? inputDialogField.value : null);
+    }, { once: true });
+    inputDialog.showModal();
+    inputDialogField.focus();
+  });
+}
+
+async function requestImage(): Promise<void> {
+  const src = await requestValue('图片地址或相对路径');
+  if (!src?.trim()) {
+    return;
+  }
+  const alt = await requestValue('图片说明', '', false) ?? '';
+  runCommand(callCommand(insertImageCommand.key, { src: src.trim(), alt }));
+}
+
+async function requestLink(): Promise<void> {
+  const href = await requestValue('链接地址');
+  if (!href?.trim()) {
+    return;
+  }
+  runCommand(callCommand(toggleLinkCommand.key, { href: href.trim() }));
+}
+
+editToolbar.addEventListener('mousedown', (event) => {
+  if (event.target instanceof Element && event.target.closest('button')) {
+    event.preventDefault();
+  }
+});
+editToolbar.addEventListener('click', (event) => {
+  const button = event.target instanceof Element
+    ? event.target.closest<HTMLButtonElement>('button[data-action]')
+    : null;
+  const action = button?.dataset.action;
+  switch (action) {
+    case 'heading-1':
+    case 'heading-2':
+    case 'heading-3': {
+      const level = Number(action.slice(-1));
+      crepe?.editor.action((ctx) => {
+        ctx.get(commandsCtx).call(setBlockTypeCommand.key, {
+          nodeType: headingSchema.type(ctx),
+          attrs: { level },
+        });
+      });
+      break;
+    }
+    case 'bold':
+      runCommand(callCommand(toggleStrongCommand.key));
+      break;
+    case 'italic':
+      runCommand(callCommand(toggleEmphasisCommand.key));
+      break;
+    case 'strike':
+      runCommand(callCommand(toggleStrikethroughCommand.key));
+      break;
+    case 'inline-code':
+      runCommand(callCommand(toggleInlineCodeCommand.key));
+      break;
+    case 'horizontal-rule':
+      runCommand(callCommand(insertHrCommand.key));
+      break;
+    case 'quote':
+      runCommand(callCommand(wrapInBlockquoteCommand.key));
+      break;
+    case 'table':
+      runCommand(callCommand(insertTableCommand.key, { row: 2, col: 2 }));
+      break;
+    case 'code-block':
+      runCommand(callCommand(createCodeBlockCommand.key));
+      break;
+    case 'details':
+      runInsertion('<details>\n<summary>折叠内容</summary>\n\n在此输入内容。\n\n</details>');
+      break;
+    case 'image':
+      void requestImage();
+      break;
+    case 'link':
+      void requestLink();
+      break;
+  }
+});
+
+listFormat?.addEventListener('change', () => {
+  const listType = listFormat.value;
+  if (listType === 'bullet') {
+    runCommand(callCommand(wrapInBulletListCommand.key));
+  } else if (listType === 'ordered') {
+    runCommand(callCommand(wrapInOrderedListCommand.key));
+  } else if (listType === 'task') {
+    const selection = crepe?.editor.action((ctx) => {
+      const { state } = ctx.get(editorViewCtx);
+      return state.doc.textBetween(state.selection.from, state.selection.to, '\n').trim();
+    });
+    runInsertion((selection || '任务内容')
+      .split(/\r?\n/)
+      .map((line) => `- [ ] ${line}`)
+      .join('\n'));
+  } else if (listType === 'definition') {
+    const selection = crepe?.editor.action((ctx) => {
+      const { state } = ctx.get(editorViewCtx);
+      return state.doc.textBetween(state.selection.from, state.selection.to, '\n').trim();
+    });
+    runInsertion(`${selection || '术语'}\n: 定义内容`);
+  }
+  listFormat.value = '';
+});
+
+modeButtons.forEach((button) => {
+  const buttonMode = button.dataset.mode;
+  if (buttonMode === 'readonly' || buttonMode === 'edit' || buttonMode === 'source') {
+    button.addEventListener('click', () => changeMode(buttonMode));
+  }
 });
 
 updateModeControls();
 
 function postChange(markdown: string): void {
+  latestMarkdown = markdown;
+  window.requestAnimationFrame(updateOutline);
   if (markdown === lastAppliedMarkdown) {
     return;
   }
-  window.requestAnimationFrame(updateOutline);
   window.clearTimeout(changeTimer);
   changeTimer = window.setTimeout(() => {
     if (markdown === lastAppliedMarkdown) {
       return;
     }
     vscode.postMessage({ type: 'change', markdown });
+    lastAppliedMarkdown = markdown;
   }, 120);
 }
 
 function updateOutline(): void {
-  const headings = root.querySelectorAll<HTMLElement>(
-    '.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6',
-  );
   const fragment = document.createDocumentFragment();
-  headings.forEach((heading, index) => {
-    const label = heading.textContent?.trim();
-    if (!label) {
-      return;
-    }
+  const headings = mode === 'source'
+    ? [...sourceEditor.value.matchAll(/^(#{1,6})\s+(.+?)\s*#*\s*$/gm)].map((match) => ({
+        label: match[2].replace(/[*_~`[\]]/g, '').trim(),
+        level: match[1].length,
+        lineStart: match.index ?? 0,
+      }))
+    : [...root.querySelectorAll<HTMLElement>(
+        '.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6',
+      )].map((heading) => ({
+        label: heading.textContent?.trim() ?? '',
+        level: Number(heading.tagName.slice(1)),
+        element: heading,
+      }));
+  headings.forEach((heading) => {
+    if (!heading.label) return;
     const button = document.createElement('button');
     button.className = 'outline-item';
     button.type = 'button';
-    button.textContent = label;
-    button.style.setProperty('--heading-level', heading.tagName.slice(1));
+    button.textContent = heading.label;
+    button.style.setProperty('--heading-level', String(heading.level));
     button.addEventListener('click', () => {
-      headings.item(index)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if ('element' in heading) {
+        heading.element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        sourceEditor.focus();
+        sourceEditor.setSelectionRange(heading.lineStart, heading.lineStart);
+      }
     });
     fragment.append(button);
   });
@@ -132,7 +608,7 @@ async function createEditor(): Promise<void> {
     root,
     defaultValue: initialMarkdown,
     features: {
-      [Crepe.Feature.BlockEdit]: false,
+      [Crepe.Feature.BlockEdit]: true,
       [Crepe.Feature.Toolbar]: false,
       [Crepe.Feature.Placeholder]: false,
       [Crepe.Feature.LinkTooltip]: false,
@@ -176,7 +652,7 @@ async function createEditor(): Promise<void> {
   nextEditor.on((listener) => {
     listener.markdownUpdated((_context, markdown) => postChange(markdown));
   });
-  nextEditor.setReadonly(!editable);
+  nextEditor.setReadonly(mode !== 'edit');
 
   try {
     await nextEditor.create();
@@ -218,7 +694,10 @@ function applyHostUpdate(message: Extract<HostMessage, { type: 'update' }>): voi
   window.clearTimeout(changeTimer);
   latestMarkdown = message.markdown;
   latestImages = message.images;
-  editable = message.editable;
+  mode = message.mode;
+  if (sourceEditor.value !== message.markdown) {
+    sourceEditor.value = message.markdown;
+  }
   updateModeControls();
   const previousTheme = theme;
   applySettings(message.theme, message.fontSize);
@@ -262,8 +741,11 @@ window.addEventListener('message', (event: MessageEvent<HostMessage>) => {
       applySettings(message.theme, message.fontSize);
       break;
     case 'mode':
-      editable = message.editable;
+      mode = message.mode;
       updateModeControls();
+      if (mode === 'source') {
+        sourceEditor.value = latestMarkdown;
+      }
       break;
     case 'anchor':
       scrollToAnchor(message.href);
@@ -287,6 +769,10 @@ root.addEventListener('click', (event) => {
     return;
   }
   vscode.postMessage({ type: 'openLink', href });
+});
+
+sourceEditor.addEventListener('input', () => {
+  postChange(sourceEditor.value);
 });
 
 vscode.postMessage({ type: 'ready' });

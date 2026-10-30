@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import type { HostMessage, ThemeKind, WebviewMessage } from './shared/protocol';
+import type { EditorMode, HostMessage, ThemeKind, WebviewMessage } from './shared/protocol';
 
 const imagePattern = /!\[[^\]]*]\(\s*(?:<([^>]+)>|([^\s)]+))(?:\s+[^)]*)?\)/g;
 const remoteResourcePattern = /^(?:https?:|data:|blob:)/i;
@@ -10,7 +10,7 @@ interface EditorState {
   document: vscode.TextDocument;
   panel: vscode.WebviewPanel;
   lastKnownContent: string;
-  editable: boolean;
+  mode: EditorMode;
   updateQueue: Promise<void>;
   disposables: vscode.Disposable[];
 }
@@ -30,7 +30,7 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
       document,
       panel,
       lastKnownContent: document.getText(),
-      editable: false,
+      mode: 'readonly',
       updateQueue: Promise.resolve(),
       disposables: [],
     };
@@ -75,20 +75,22 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
       case 'ready':
         this.postDocumentUpdate(state);
         break;
-      case 'change':
+      case 'change': {
+        const canEdit = state.mode !== 'readonly';
         state.updateQueue = state.updateQueue
-          .then(() => this.applyWebviewChange(state, message.markdown))
+          .then(() => this.applyWebviewChange(state, message.markdown, canEdit))
           .catch((error: unknown) => {
             const detail = error instanceof Error ? error.message : String(error);
             void vscode.window.showErrorMessage(`MarkdownView could not update the document: ${detail}`);
             this.sendDocumentUpdate(state);
           });
         break;
+      }
       case 'setMode':
-        state.editable = message.editable;
+        state.mode = message.mode;
         void state.panel.webview.postMessage({
           type: 'mode',
-          editable: state.editable,
+          mode: state.mode,
         } satisfies HostMessage);
         break;
       case 'openLink':
@@ -97,9 +99,9 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
     }
   }
 
-  private async applyWebviewChange(state: EditorState, markdown: string): Promise<void> {
+  private async applyWebviewChange(state: EditorState, markdown: string, canEdit: boolean): Promise<void> {
     const { document } = state;
-    if (!state.editable) {
+    if (!canEdit) {
       this.postDocumentUpdate(state);
       return;
     }
@@ -144,7 +146,7 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
       markdown,
       images,
       ...this.getSettings(),
-      editable: state.editable,
+      mode: state.mode,
     } satisfies HostMessage);
   }
 
@@ -312,19 +314,104 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
   <title>MarkdownView</title>
 </head>
 <body>
-  <aside id="outline-panel" aria-label="Document outline">
-    <h2>Outline</h2>
-    <nav id="outline-list" aria-label="Markdown headings"></nav>
-  </aside>
-  <nav id="mode-toolbar" aria-label="Markdown editor mode">
-    <button id="readonly-mode" type="button" title="Read-only mode" aria-label="Read-only mode" aria-pressed="true">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 10V7a6 6 0 0 1 12 0v3M5 10h14v11H5zM12 14v3"></path></svg>
-    </button>
-    <button id="edit-mode" type="button" title="Edit mode" aria-label="Edit mode" aria-pressed="false">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4zM13.5 6.5l4 4"></path></svg>
-    </button>
-  </nav>
-  <main id="editor" aria-label="Markdown editor" data-mermaid-uri="${escapeAttribute(mermaidUri.toString())}"></main>
+  <div id="app-shell">
+    <aside id="outline-panel" aria-label="Document outline">
+      <h2>文档大纲</h2>
+      <nav id="outline-list" aria-label="Markdown headings"></nav>
+    </aside>
+    <button
+      id="outline-resizer"
+      type="button"
+      role="separator"
+      aria-label="调整大纲宽度"
+      aria-orientation="vertical"
+      aria-valuemin="168"
+      aria-valuemax="392"
+      aria-valuenow="224"
+      title="拖动调整大纲宽度"
+    ></button>
+    <div id="workspace">
+      <header id="editor-header">
+        <nav id="edit-toolbar" aria-label="Markdown formatting" data-visible="false">
+          <button type="button" data-action="heading-1" title="标题 1" aria-label="标题 1">H1</button>
+          <button type="button" data-action="heading-2" title="标题 2" aria-label="标题 2">H2</button>
+          <button type="button" data-action="heading-3" title="标题 3" aria-label="标题 3">H3</button>
+          <span class="toolbar-separator" aria-hidden="true"></span>
+          <button type="button" data-action="bold" title="加粗" aria-label="加粗"><strong>B</strong></button>
+          <button type="button" data-action="italic" title="斜体" aria-label="斜体"><em>I</em></button>
+          <button type="button" data-action="strike" title="删除线" aria-label="删除线"><s>S</s></button>
+          <button type="button" data-action="inline-code" title="行内代码" aria-label="行内代码">&lt;/&gt;</button>
+          <span class="toolbar-separator" aria-hidden="true"></span>
+          <button type="button" data-action="horizontal-rule" title="水平线" aria-label="水平线">—</button>
+          <button type="button" data-action="quote" title="引用" aria-label="引用">❝</button>
+          <label class="toolbar-list-control">
+            <span class="visually-hidden">插入列表</span>
+            <select id="list-format" aria-label="插入列表" title="列表">
+              <option value="">☷</option>
+              <option value="bullet">无序列表</option>
+              <option value="ordered">有序列表</option>
+              <option value="task">任务列表</option>
+              <option value="definition">定义列表</option>
+            </select>
+          </label>
+          <span class="toolbar-separator" aria-hidden="true"></span>
+          <button type="button" data-action="table" title="表格" aria-label="表格">▦</button>
+          <button type="button" data-action="code-block" title="插入代码块" aria-label="插入代码块">{ }</button>
+          <button type="button" data-action="details" title="隐藏细节（折叠块）" aria-label="插入折叠块">▤</button>
+          <span class="toolbar-separator" aria-hidden="true"></span>
+          <button type="button" data-action="image" title="图片" aria-label="插入图片">▧</button>
+          <button type="button" data-action="link" title="链接" aria-label="插入链接">🔗</button>
+        </nav>
+        <nav id="mode-toolbar" aria-label="Markdown editor mode">
+          <button id="readonly-mode" type="button" data-mode="readonly" title="只读模式" aria-pressed="true">只读</button>
+          <button id="edit-mode" type="button" data-mode="edit" title="编辑模式" aria-pressed="false">编辑</button>
+          <button id="source-mode" type="button" data-mode="source" title="源码模式" aria-pressed="false">源码</button>
+        </nav>
+      </header>
+      <div id="content-stage">
+        <main id="editor" aria-label="Markdown editor" data-mermaid-uri="${escapeAttribute(mermaidUri.toString())}"></main>
+        <textarea id="source-editor" aria-label="Markdown source" hidden spellcheck="false"></textarea>
+        <div id="source-transition-loading" role="status" aria-live="polite" hidden>
+          <span class="loading-spinner" aria-hidden="true"></span>
+          <span>正在加载 Markdown 内容…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="block-insert-menu" role="menu" aria-label="插入内容" hidden>
+    <section>
+      <h2>文本</h2>
+      <button type="button" role="menuitem" data-insert="paragraph">正文</button>
+      <button type="button" role="menuitem" data-insert="heading-1">标题 1</button>
+      <button type="button" role="menuitem" data-insert="heading-2">标题 2</button>
+      <button type="button" role="menuitem" data-insert="heading-3">标题 3</button>
+      <button type="button" role="menuitem" data-insert="heading-4">标题 4</button>
+      <button type="button" role="menuitem" data-insert="heading-5">标题 5</button>
+      <button type="button" role="menuitem" data-insert="heading-6">标题 6</button>
+    </section>
+    <section>
+      <h2>块</h2>
+      <button type="button" role="menuitem" data-insert="quote">引用</button>
+      <button type="button" role="menuitem" data-insert="bullet-list">无序列表</button>
+      <button type="button" role="menuitem" data-insert="ordered-list">有序列表</button>
+      <button type="button" role="menuitem" data-insert="task-list">任务列表</button>
+      <button type="button" role="menuitem" data-insert="definition-list">定义列表</button>
+      <button type="button" role="menuitem" data-insert="divider">水平线</button>
+      <button type="button" role="menuitem" data-insert="table">表格</button>
+      <button type="button" role="menuitem" data-insert="code-block">代码块</button>
+      <button type="button" role="menuitem" data-insert="details">折叠块</button>
+    </section>
+  </div>
+  <dialog id="toolbar-input-dialog">
+    <form method="dialog">
+      <label id="toolbar-input-label" for="toolbar-input"></label>
+      <input id="toolbar-input" type="text">
+      <div class="toolbar-dialog-actions">
+        <button type="submit" value="cancel">取消</button>
+        <button type="submit" value="confirm">确定</button>
+      </div>
+    </form>
+  </dialog>
   <script nonce="${nonce}" src="${escapeAttribute(scriptUri.toString())}"></script>
 </body>
 </html>`;
@@ -336,14 +423,14 @@ function isWebviewMessage(value: unknown): value is WebviewMessage {
     return false;
   }
 
-  const message = value as { type: unknown; markdown?: unknown; href?: unknown; editable?: unknown };
+  const message = value as { type: unknown; markdown?: unknown; href?: unknown; mode?: unknown };
   switch (message.type) {
     case 'ready':
       return true;
     case 'change':
       return typeof message.markdown === 'string';
     case 'setMode':
-      return typeof message.editable === 'boolean';
+      return message.mode === 'readonly' || message.mode === 'edit' || message.mode === 'source';
     case 'openLink':
       return typeof message.href === 'string';
     default:

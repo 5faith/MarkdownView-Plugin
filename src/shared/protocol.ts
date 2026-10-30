@@ -1,4 +1,5 @@
 export type ThemeKind = 'light' | 'dark';
+export type EditorMode = 'readonly' | 'edit' | 'source';
 
 export type HostMessage =
   | {
@@ -7,7 +8,7 @@ export type HostMessage =
       images: Record<string, string>;
       theme: ThemeKind;
       fontSize: number;
-      editable: boolean;
+      mode: EditorMode;
     }
   | {
       type: 'settings';
@@ -16,7 +17,7 @@ export type HostMessage =
     }
   | {
       type: 'mode';
-      editable: boolean;
+      mode: EditorMode;
     }
   | {
       type: 'anchor';
@@ -33,7 +34,7 @@ export type WebviewMessage =
     }
   | {
       type: 'setMode';
-      editable: boolean;
+      mode: EditorMode;
     }
   | {
       type: 'openLink';
