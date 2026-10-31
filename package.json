@@ -6,6 +6,7 @@
   "version": "0.1.0",
   "publisher": "5faith",
   "license": "MIT",
+  "icon": "assets/style3-dark-app-icon.ico",
   "repository": {
     "type": "git",
     "url": "https://github.com/5faith/MarkdownView-Plugin.git"
