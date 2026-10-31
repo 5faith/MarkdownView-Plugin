@@ -1,7 +1,8 @@
 import { EditorView } from '@codemirror/view';
 import { Crepe } from '@milkdown/crepe';
 import type { Ctx } from '@milkdown/kit/ctx';
-import { commandsCtx, editorViewCtx } from '@milkdown/kit/core';
+import { commandsCtx, editorViewCtx, parserCtx } from '@milkdown/kit/core';
+import type { Node as ProseMirrorNode } from '@milkdown/kit/prose/model';
 import { TextSelection } from '@milkdown/kit/prose/state';
 import {
   createCodeBlockCommand,
@@ -24,7 +25,9 @@ import {
 } from '@milkdown/kit/preset/gfm';
 import { callCommand, insert, replaceAll } from '@milkdown/kit/utils';
 import { containerPlugin } from '@xz-summer/milkdown-container';
-import { configureMermaid, markdownSyntaxPlugins } from './markdown-extensions';
+import { markdownSyntaxPlugins } from './markdown-extensions';
+import { configureMermaid } from './mermaid-view';
+import { splitSafeMarkdownBlocks } from './markdown-blocks';
 import '@milkdown/crepe/theme/common/style.css';
 import '@xz-summer/milkdown-container/style.css';
 import './style.css';
@@ -52,6 +55,7 @@ let changeTimer: number | undefined;
 let editorTask: Promise<void> = Promise.resolve();
 let sourceEntryMarkdown: string | undefined;
 let sourceTransitionId = 0;
+let isApplyingSourceMarkdown = false;
 
 function requireElement(selector: string): HTMLElement {
   const element = document.querySelector<HTMLElement>(selector);
@@ -78,6 +82,7 @@ const inputDialogField = document.querySelector<HTMLInputElement>('#toolbar-inpu
 const outlineList = requireElement('#outline-list');
 const outlinePanel = requireElement('#outline-panel');
 const sourceTransitionLoading = requireElement('#source-transition-loading');
+const sourceTransitionStatus = requireElement('#source-transition-status');
 const outlineResizerElement = document.querySelector<HTMLButtonElement>('#outline-resizer');
 if (!outlineResizerElement) {
   throw new Error('MarkdownView outline resizer was not found.');
@@ -151,6 +156,7 @@ outlineResizer.addEventListener('keydown', (event) => {
 });
 
 function updateModeControls(): void {
+  configureMermaid(theme, mode);
   modeButtons.forEach((button) => {
     button.setAttribute('aria-pressed', String(button.dataset.mode === mode));
   });
@@ -162,11 +168,36 @@ function updateModeControls(): void {
   crepe?.setReadonly(mode !== 'edit');
 }
 
+function focusEditorWithoutScrolling(): void {
+  crepe?.editor.action((ctx) => {
+    ctx.get(editorViewCtx).dom.focus({ preventScroll: true });
+  });
+}
+
 function setSourceTransitionLoading(loading: boolean): number {
   sourceTransitionId += 1;
   sourceTransitionLoading.hidden = !loading;
+  sourceTransitionLoading.removeAttribute('data-error');
+  sourceTransitionStatus.textContent = '正在加载 Markdown 内容…';
+  modeButtons.forEach((button) => {
+    button.disabled = loading;
+  });
   root.setAttribute('aria-busy', String(loading));
   return sourceTransitionId;
+}
+
+function showSourceTransitionError(error: unknown, transitionId: number): void {
+  if (transitionId !== sourceTransitionId) {
+    return;
+  }
+  const detail = error instanceof Error ? error.message : String(error);
+  console.error('MarkdownView could not restore the rich editor from source mode.', error);
+  sourceTransitionLoading.dataset.error = 'true';
+  sourceTransitionStatus.textContent = `无法加载 Markdown 内容：${detail}`;
+  modeButtons.forEach((button) => {
+    button.disabled = false;
+  });
+  root.setAttribute('aria-busy', 'false');
 }
 
 function finishSourceTransitionLoading(transitionId: number): void {
@@ -182,6 +213,192 @@ function flushPendingChange(): void {
   if (mode !== 'readonly' && latestMarkdown !== lastAppliedMarkdown) {
     vscode.postMessage({ type: 'change', markdown: latestMarkdown });
     lastAppliedMarkdown = latestMarkdown;
+  }
+}
+
+function logMarkdownUpdate(
+  strategy: 'incremental' | 'chunked' | 'full',
+  markdown: string,
+  parseMs: number,
+  applyMs: number,
+): void {
+  console.debug(
+    `[MarkdownView] source restore (${strategy}): ${markdown.length} chars, ` +
+    `parse ${parseMs.toFixed(1)} ms, apply ${applyMs.toFixed(1)} ms`,
+  );
+}
+
+function tryApplySingleBlockUpdate(previousMarkdown: string, nextMarkdown: string): boolean {
+  if (!crepe) {
+    return false;
+  }
+  const previousBlocks = splitSafeMarkdownBlocks(previousMarkdown);
+  const nextBlocks = splitSafeMarkdownBlocks(nextMarkdown);
+  if (!previousBlocks || !nextBlocks || previousBlocks.length !== nextBlocks.length) {
+    return false;
+  }
+
+  const changedIndices = previousBlocks.flatMap((block, index) =>
+    block.markdown === nextBlocks[index].markdown ? [] : [index],
+  );
+  if (changedIndices.length !== 1) {
+    return false;
+  }
+  const changedIndex = changedIndices[0];
+  const previousBlock = previousBlocks[changedIndex];
+  const nextBlock = nextBlocks[changedIndex];
+  if (previousBlock.kind !== nextBlock.kind ||
+    (nextBlock.kind !== 'paragraph' && nextBlock.kind !== 'heading')) {
+    return false;
+  }
+
+  const wasApplyingSourceMarkdown = isApplyingSourceMarkdown;
+  isApplyingSourceMarkdown = true;
+  try {
+    return crepe.editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx);
+      const existingNodes = view.state.doc.content.content;
+      if (existingNodes.length !== previousBlocks.length) {
+        return false;
+      }
+
+      for (const [index, block] of previousBlocks.entries()) {
+        const node = existingNodes[index];
+        const expectedType = block.kind === 'heading' ? 'heading' : 'paragraph';
+        if (block.kind === 'fence') {
+          if (node.type.name !== 'code_block' && node.type.name !== 'mermaid_diagram') {
+            return false;
+          }
+        } else if (node.type.name !== expectedType) {
+          return false;
+        }
+      }
+
+      const parseStartedAt = performance.now();
+      const parsed = ctx.get(parserCtx)(nextBlock.markdown);
+      const parseFinishedAt = performance.now();
+      const oldNode = existingNodes[changedIndex];
+      if (!parsed || parsed.childCount !== 1 ||
+        parsed.firstChild?.type.name !== oldNode.type.name) {
+        return false;
+      }
+
+      let from = 0;
+      for (let index = 0; index < changedIndex; index += 1) {
+        from += existingNodes[index].nodeSize;
+      }
+      view.dispatch(view.state.tr.replaceWith(from, from + oldNode.nodeSize, parsed.content));
+      logMarkdownUpdate('incremental', nextMarkdown, parseFinishedAt - parseStartedAt, performance.now() - parseFinishedAt);
+      return true;
+    });
+  } finally {
+    isApplyingSourceMarkdown = wasApplyingSourceMarkdown;
+  }
+}
+
+async function applyMarkdownInChunks(markdown: string, transitionId: number): Promise<boolean> {
+  if (!crepe) {
+    return false;
+  }
+  const blocks = splitSafeMarkdownBlocks(markdown);
+  if (!blocks || blocks.length < 2) {
+    return false;
+  }
+
+  let parseMs = 0;
+  let applyMs = 0;
+  let committed = false;
+  isApplyingSourceMarkdown = true;
+  try {
+    for (let index = 0; index < blocks.length;) {
+      if (transitionId !== sourceTransitionId || mode === 'source' || !crepe) {
+        return false;
+      }
+
+      const end = Math.min(index + 3, blocks.length);
+      const parsedBatch: ProseMirrorNode[] = [];
+      for (let blockIndex = index; blockIndex < end; blockIndex += 1) {
+        const parseStartedAt = performance.now();
+        const parsed = crepe.editor.action((ctx) => ctx.get(parserCtx)(blocks[blockIndex].markdown));
+        parseMs += performance.now() - parseStartedAt;
+        if (!parsed || parsed.childCount !== 1 || !parsed.firstChild) {
+          return false;
+        }
+        parsedBatch.push(parsed.firstChild);
+      }
+
+      const applyStartedAt = performance.now();
+      crepe.editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx);
+        const from = committed ? view.state.doc.content.size : 0;
+        const to = committed ? from : view.state.doc.content.size;
+        view.dispatch(view.state.tr.replaceWith(from, to, parsedBatch));
+      });
+      applyMs += performance.now() - applyStartedAt;
+      committed = true;
+      index = end;
+      sourceTransitionStatus.textContent = `正在加载 Markdown 内容（${index}/${blocks.length}）…`;
+      if (index < blocks.length) {
+        await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      }
+    }
+  } finally {
+    isApplyingSourceMarkdown = false;
+  }
+
+  if (transitionId !== sourceTransitionId || mode === 'source') {
+    return false;
+  }
+  lastAppliedMarkdown = markdown;
+  window.requestAnimationFrame(updateOutline);
+  logMarkdownUpdate('chunked', markdown, parseMs, applyMs);
+  return true;
+}
+
+function applyMarkdownInFull(markdown: string): void {
+  if (!crepe) {
+    throw new Error('The Milkdown editor is not ready.');
+  }
+
+  const startedAt = performance.now();
+  const wasApplyingSourceMarkdown = isApplyingSourceMarkdown;
+  isApplyingSourceMarkdown = true;
+  try {
+    crepe.editor.action((ctx) => {
+      const parseStartedAt = performance.now();
+      const parsed = ctx.get(parserCtx)(markdown);
+      const parseFinishedAt = performance.now();
+      if (!parsed) {
+        throw new Error('Milkdown could not parse the Markdown source.');
+      }
+      const view = ctx.get(editorViewCtx);
+      view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, parsed.content));
+      const appliedAt = performance.now();
+      logMarkdownUpdate('full', markdown, parseFinishedAt - parseStartedAt, appliedAt - parseFinishedAt);
+    });
+  } finally {
+    isApplyingSourceMarkdown = wasApplyingSourceMarkdown;
+  }
+  lastAppliedMarkdown = markdown;
+  window.requestAnimationFrame(updateOutline);
+  console.debug(`[MarkdownView] source restore total: ${(performance.now() - startedAt).toFixed(1)} ms`);
+}
+
+async function restoreMarkdownFromSource(
+  previousMarkdown: string,
+  nextMarkdown: string,
+  transitionId: number,
+): Promise<void> {
+  if (tryApplySingleBlockUpdate(previousMarkdown, nextMarkdown)) {
+    lastAppliedMarkdown = nextMarkdown;
+    window.requestAnimationFrame(updateOutline);
+    return;
+  }
+  if (await applyMarkdownInChunks(nextMarkdown, transitionId)) {
+    return;
+  }
+  if (transitionId === sourceTransitionId && mode !== 'source') {
+    applyMarkdownInFull(nextMarkdown);
   }
 }
 
@@ -205,8 +422,9 @@ function changeMode(nextMode: EditorMode): void {
     sourceEntryMarkdown = latestMarkdown;
   }
 
+  const previousSourceMarkdown = sourceEntryMarkdown ?? '';
   const sourceChanged = previousMode === 'source' &&
-    latestMarkdown !== sourceEntryMarkdown;
+    latestMarkdown !== previousSourceMarkdown;
   const markdownToApply = latestMarkdown;
   mode = nextMode;
   updateModeControls();
@@ -221,17 +439,14 @@ function changeMode(nextMode: EditorMode): void {
           finishSourceTransitionLoading(transitionId);
           return;
         }
-        try {
-          crepe.editor.action(replaceAll(markdownToApply));
-          lastAppliedMarkdown = markdownToApply;
-          if (mode === 'edit') {
-            crepe.editor.action((ctx) => ctx.get(editorViewCtx).focus());
-          }
-        } catch (error) {
-          console.error('MarkdownView could not restore the rich editor from source mode.', error);
-        } finally {
-          finishSourceTransitionLoading(transitionId);
-        }
+        void restoreMarkdownFromSource(previousSourceMarkdown, markdownToApply, transitionId)
+          .then(() => {
+            if (mode === 'edit' && transitionId === sourceTransitionId) {
+              focusEditorWithoutScrolling();
+            }
+            finishSourceTransitionLoading(transitionId);
+          })
+          .catch((error: unknown) => showSourceTransitionError(error, transitionId));
       });
     });
   } else if (previousMode === 'source') {
@@ -240,7 +455,7 @@ function changeMode(nextMode: EditorMode): void {
   }
 
   if (mode === 'edit' && !sourceChanged) {
-    crepe?.editor.action((ctx) => ctx.get(editorViewCtx).focus());
+    focusEditorWithoutScrolling();
   } else if (mode === 'source') {
     sourceEditor.focus();
   }
@@ -601,7 +816,7 @@ async function createEditor(): Promise<void> {
   root.dataset.theme = theme;
   document.documentElement.dataset.theme = theme;
   document.documentElement.style.setProperty('--text-size', `${fontSize}px`);
-  configureMermaid(theme);
+  configureMermaid(theme, mode);
 
   const initialMarkdown = latestMarkdown;
   const nextEditor = new Crepe({
@@ -650,7 +865,11 @@ async function createEditor(): Promise<void> {
     editor.use([...containerPlugin, ...markdownSyntaxPlugins]);
   });
   nextEditor.on((listener) => {
-    listener.markdownUpdated((_context, markdown) => postChange(markdown));
+    listener.markdownUpdated((_context, markdown) => {
+      if (!isApplyingSourceMarkdown) {
+        postChange(markdown);
+      }
+    });
   });
   nextEditor.setReadonly(mode !== 'edit');
 

@@ -11,6 +11,36 @@
   --outline-width: 16rem;
   --editor-header-height: 2.8rem;
   --editor-min-width: 40rem;
+
+  /* Crepe 结构样式引用的主题变量未随包引入，这里映射到 VS Code 主题变量。 */
+  --crepe-base-font-size: var(--text-size, 14px);
+  --crepe-font-default: var(--vscode-font-family);
+  --crepe-font-title: var(--vscode-font-family);
+  --crepe-font-code: var(--vscode-editor-font-family, monospace);
+  --crepe-color-background: var(--vscode-editor-background);
+  --crepe-color-on-background: var(--vscode-editor-foreground);
+  --crepe-color-surface: var(--vscode-editorWidget-background, var(--vscode-sideBar-background, var(--vscode-editor-background)));
+  --crepe-color-surface-low: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  --crepe-color-on-surface: var(--vscode-editorWidget-foreground, var(--vscode-editor-foreground));
+  --crepe-color-on-surface-variant: var(--vscode-descriptionForeground, var(--vscode-editor-foreground));
+  --crepe-color-secondary: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  --crepe-color-on-secondary: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground));
+  --crepe-color-primary: var(--vscode-focusBorder, var(--vscode-button-background));
+  --crepe-color-outline: color-mix(in srgb, var(--vscode-editor-foreground), transparent 50%);
+  --crepe-color-hover: var(--vscode-toolbar-hoverBackground, var(--vscode-list-hoverBackground, transparent));
+  --crepe-color-selected: var(--vscode-editor-selectionBackground, rgba(38, 79, 120, 0.65));
+  --crepe-color-inverse: var(--vscode-editor-foreground);
+  --crepe-color-on-inverse: var(--vscode-editor-background);
+  --crepe-color-inline-code: var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground));
+  --crepe-color-inline-area: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  --crepe-color-diff-added: var(--vscode-gitDecoration.addedResourceForeground, var(--vscode-testing-iconPassed, #2da44e));
+  --crepe-color-diff-added-text: var(--crepe-color-diff-added);
+  --crepe-color-diff-added-bg: color-mix(in srgb, var(--crepe-color-diff-added), transparent 88%);
+  --crepe-color-diff-removed: var(--vscode-gitDecoration.deletedResourceForeground, var(--vscode-testing-iconFailed, #cf222e));
+  --crepe-color-diff-removed-text: var(--crepe-color-diff-removed);
+  --crepe-color-diff-removed-bg: color-mix(in srgb, var(--crepe-color-diff-removed), transparent 88%);
+  --crepe-shadow-1: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --crepe-shadow-2: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 
 html,
@@ -406,6 +436,19 @@ body[data-resizing-outline='true'] {
   animation: markdownview-loading-spin 0.8s linear infinite;
 }
 
+#source-transition-loading[data-error='true'] .loading-spinner {
+  display: none;
+}
+
+#source-transition-loading[data-error='true'] {
+  color: var(--vscode-errorForeground);
+}
+
+.markdownview-mermaid-deferred {
+  margin: 0;
+  color: var(--vscode-descriptionForeground);
+}
+
 @keyframes markdownview-loading-spin {
   to {
     transform: rotate(360deg);
@@ -501,6 +544,15 @@ body[data-resizing-outline='true'] {
   border-radius: 0.35rem;
 }
 
+#editor .milkdown-table-block th,
+#editor .milkdown-table-block td {
+  border-color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 60%);
+}
+
+#editor .milkdown-table-block th {
+  background: color-mix(in srgb, var(--vscode-editor-foreground), transparent 94%);
+}
+
 #editor .markdownview-alert {
   margin: 1rem 0;
   padding: 0.25rem 0.75rem;
@@ -541,6 +593,10 @@ body[data-resizing-outline='true'] {
   text-align: center;
 }
 
+#editor .mermaid-diagram-preview[hidden] {
+  display: none;
+}
+
 #editor .mermaid-diagram-preview svg {
   max-width: 100%;
   height: auto;
@@ -550,10 +606,31 @@ body[data-resizing-outline='true'] {
   border-top: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
 }
 
-#editor .mermaid-diagram-source summary {
+#editor .mermaid-diagram-source-toggle {
+  display: block;
+  width: 100%;
   padding: 0.4rem 0.75rem;
+  border: 0;
+  background: transparent;
   color: var(--vscode-descriptionForeground);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
+}
+
+#editor .mermaid-diagram-source-toggle:hover {
+  color: var(--vscode-editor-foreground);
+}
+
+#editor .mermaid-diagram-source-marker {
+  display: inline-block;
+  width: 1.1ch;
+}
+
+#editor .mermaid-diagram-source[data-collapsed='true'] .mermaid-diagram-source-body {
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
 }
 
 #editor .mermaid-diagram-source pre {
@@ -563,9 +640,13 @@ body[data-resizing-outline='true'] {
   text-align: left;
 }
 
-#editor .mermaid-diagram-error {
+#editor .mermaid-diagram-error-strip {
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  border-top: 1px solid var(--vscode-inputValidation-errorBorder, var(--vscode-panel-border, transparent));
   color: var(--vscode-errorForeground);
-  white-space: pre-wrap;
+  font-size: 0.85em;
+  text-align: left;
 }
 
 #editor pre,

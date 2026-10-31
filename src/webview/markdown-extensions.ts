@@ -3,18 +3,7 @@ import type { MilkdownPlugin } from '@milkdown/kit/ctx';
 import { InitReady, remarkPluginsCtx } from '@milkdown/kit/core';
 import { $nodeSchema, $remark, $view } from '@milkdown/kit/utils';
 import type { RemarkPlugin } from '@milkdown/kit/transformer';
-import type { ThemeKind } from '../shared/protocol';
-import { translateUsecaseDiagram } from './usecase-diagram';
-
-let diagramId = 0;
-let mermaidTheme: ThemeKind = 'light';
-let mermaidLoad: Promise<typeof import('mermaid').default> | undefined;
-
-declare global {
-  interface Window {
-    MarkdownViewMermaid?: typeof import('mermaid').default;
-  }
-}
+import { mermaidDiagramPlugins } from './mermaid-view';
 
 interface AstNode {
   type: string;
@@ -35,37 +24,6 @@ function getChildren(node: AstNode): AstNode[] | undefined {
 
 function textValue(node: AstNode): string {
   return typeof node.value === 'string' ? node.value : '';
-}
-
-function loadMermaid(): Promise<typeof import('mermaid').default> {
-  if (window.MarkdownViewMermaid) {
-    return Promise.resolve(window.MarkdownViewMermaid);
-  }
-  if (mermaidLoad) {
-    return mermaidLoad;
-  }
-
-  mermaidLoad = new Promise((resolve, reject) => {
-    const mermaidUri = document.querySelector<HTMLElement>('#editor')?.dataset.mermaidUri;
-    if (!mermaidUri) {
-      reject(new Error('The Mermaid runtime URI was not provided by the extension host.'));
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = mermaidUri;
-    script.nonce = document.querySelector<HTMLScriptElement>('script[nonce]')?.nonce ?? '';
-    script.onload = () => {
-      if (window.MarkdownViewMermaid) {
-        resolve(window.MarkdownViewMermaid);
-      } else {
-        reject(new Error('The Mermaid runtime loaded without registering its API.'));
-      }
-    };
-    script.onerror = () => reject(new Error('The Mermaid runtime script could not be loaded.'));
-    document.head.append(script);
-  });
-  return mermaidLoad;
 }
 
 function plainHtmlText(value: string): string {
@@ -429,102 +387,6 @@ const definitionDescriptionSchema = $nodeSchema('definition_description', () => 
   },
 }));
 
-const mermaidDiagramSchema = $nodeSchema('mermaid_diagram', () => ({
-  group: 'block',
-  content: 'text*',
-  code: true,
-  defining: true,
-  isolating: true,
-  parseDOM: [{ tag: 'pre[data-mermaid]' }],
-  toDOM: () => ['pre', { 'data-mermaid': 'true' }, ['code', 0]],
-  parseMarkdown: {
-    match: (node) => node.type === 'markdownviewMermaid',
-    runner: (state, node, type) => {
-      state.openNode(type);
-      state.addText(typeof node.value === 'string' ? node.value : '');
-      state.closeNode();
-    },
-  },
-  toMarkdown: {
-    match: (node) => node.type.name === 'mermaid_diagram',
-    runner: (state, node) => {
-      state.addNode('code', undefined, node.textContent, { lang: 'mermaid' });
-    },
-  },
-}));
-
-const mermaidDiagramView = $view(mermaidDiagramSchema.node, () => (node) => {
-  let currentNode = node;
-  let renderVersion = 0;
-  let destroyed = false;
-
-  const dom = document.createElement('section');
-  dom.className = 'mermaid-diagram';
-  const preview = document.createElement('div');
-  preview.className = 'mermaid-diagram-preview';
-
-  const sourceDetails = document.createElement('details');
-  sourceDetails.className = 'mermaid-diagram-source';
-  const summary = document.createElement('summary');
-  summary.textContent = 'Mermaid source';
-  const pre = document.createElement('pre');
-  const contentDOM = document.createElement('code');
-  contentDOM.className = 'language-mermaid';
-  pre.append(contentDOM);
-  sourceDetails.append(summary, pre);
-  dom.append(preview, sourceDetails);
-
-  const render = (): void => {
-    const version = ++renderVersion;
-    const source = currentNode.textContent.trim();
-    preview.replaceChildren();
-    if (!source) {
-      return;
-    }
-
-    void loadMermaid().then((mermaid) => {
-      mermaid.initialize({
-        startOnLoad: false,
-        securityLevel: 'strict',
-        theme: mermaidTheme === 'dark' ? 'dark' : 'default',
-        flowchart: { htmlLabels: false },
-      });
-      return mermaid.render(
-        `markdownview-diagram-${++diagramId}`,
-        translateUsecaseDiagram(source) ?? source,
-      );
-    }).then(({ svg }) => {
-      if (!destroyed && version === renderVersion) {
-        preview.innerHTML = svg;
-      }
-    }).catch((error: unknown) => {
-      if (!destroyed && version === renderVersion) {
-        const message = document.createElement('p');
-        message.className = 'mermaid-diagram-error';
-        message.textContent = `Mermaid could not render this diagram: ${error instanceof Error ? error.message : String(error)}`;
-        preview.replaceChildren(message);
-      }
-    });
-  };
-
-  render();
-  return {
-    dom,
-    contentDOM,
-    update(nextNode) {
-      if (nextNode.type !== currentNode.type) {
-        return false;
-      }
-      currentNode = nextNode;
-      render();
-      return true;
-    },
-    destroy() {
-      destroyed = true;
-    },
-  };
-});
-
 export const markdownSyntaxPlugins = [
   markdownSyntaxPlugin,
   ...definitionListPlugin,
@@ -535,10 +397,5 @@ export const markdownSyntaxPlugins = [
   ...definitionListSchema,
   ...definitionTermSchema,
   ...definitionDescriptionSchema,
-  ...mermaidDiagramSchema,
-  mermaidDiagramView,
+  ...mermaidDiagramPlugins,
 ];
-
-export function configureMermaid(theme: ThemeKind): void {
-  mermaidTheme = theme;
-}

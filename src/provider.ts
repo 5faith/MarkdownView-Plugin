@@ -373,7 +373,7 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
         <textarea id="source-editor" aria-label="Markdown source" hidden spellcheck="false"></textarea>
         <div id="source-transition-loading" role="status" aria-live="polite" hidden>
           <span class="loading-spinner" aria-hidden="true"></span>
-          <span>正在加载 Markdown 内容…</span>
+          <span id="source-transition-status">正在加载 Markdown 内容…</span>
         </div>
       </div>
     </div>
