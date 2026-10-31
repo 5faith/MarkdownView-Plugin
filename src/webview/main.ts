@@ -48,6 +48,7 @@ let crepe: Crepe | undefined;
 let latestMarkdown = '';
 let latestImages: Record<string, string> = {};
 let lastAppliedMarkdown: string | undefined;
+let hostUsesCrLf = false;
 let theme: ThemeKind = 'light';
 let fontSize = 14;
 let mode: EditorMode = 'readonly';
@@ -56,6 +57,16 @@ let editorTask: Promise<void> = Promise.resolve();
 let sourceEntryMarkdown: string | undefined;
 let sourceTransitionId = 0;
 let isApplyingSourceMarkdown = false;
+
+/**
+ * Normalize CRLF/CR line endings to LF before markdown enters Milkdown.
+ * ProseMirror keeps "\r" as regular characters inside code blocks while
+ * CodeMirror folds "\r\n" into a single line break, so mixed endings break
+ * the 1:1 offset mapping of the code block NodeView and corrupt edits.
+ */
+function normalizeMarkdownEol(markdown: string): string {
+  return markdown.replace(/\r\n?/g, '\n');
+}
 
 function requireElement(selector: string): HTMLElement {
   const element = document.querySelector<HTMLElement>(selector);
@@ -760,7 +771,10 @@ function postChange(markdown: string): void {
     if (markdown === lastAppliedMarkdown) {
       return;
     }
-    vscode.postMessage({ type: 'change', markdown });
+    // Keep the document's original CRLF endings: the webview normalizes to LF
+    // internally, so restore them before writing back to VS Code.
+    const outgoing = hostUsesCrLf ? markdown.replace(/\n/g, '\r\n') : markdown;
+    vscode.postMessage({ type: 'change', markdown: outgoing });
     lastAppliedMarkdown = markdown;
   }, 120);
 }
@@ -910,12 +924,14 @@ function applySettings(nextTheme: ThemeKind, nextFontSize: number): void {
 }
 
 function applyHostUpdate(message: Extract<HostMessage, { type: 'update' }>): void {
+  hostUsesCrLf = message.markdown.includes('\r\n');
+  const markdown = normalizeMarkdownEol(message.markdown);
   window.clearTimeout(changeTimer);
-  latestMarkdown = message.markdown;
+  latestMarkdown = markdown;
   latestImages = message.images;
   mode = message.mode;
-  if (sourceEditor.value !== message.markdown) {
-    sourceEditor.value = message.markdown;
+  if (sourceEditor.value !== markdown) {
+    sourceEditor.value = markdown;
   }
   updateModeControls();
   const previousTheme = theme;

@@ -8,7 +8,7 @@
 
 这是一篇讲解如何正确使用 **Markdown** 的排版示例，学会这个很有必要，能让你的文章有更佳清晰的排版。
 
-> 引用文本：Markdown is a text formatting syntax inspired
+> 引用文本：Markdown is a text formatting syntax inspire
 
 ## 语法指导
 
@@ -16,12 +16,12 @@
 
 这段内容展示了在内容里面一些排版格式，比如：
 
-- **加粗** - `**加粗**`
-- *倾斜* - `*倾斜*`
-- ~~删除线~~ - `~~删除线~~`
-- `Code 标记` - `` `Code 标记` ``
-- [超级链接](https://github.com/5faith/MarkdownView) - `[超级链接](https://github.com/5faith/MarkdownView)`
-- [username@gmail.com](mailto:username@gmail.com) - `[username@gmail.com](mailto:username@gmail.com)`
+* **加粗** - `**加粗**`
+* *倾斜* - `*倾斜*`
+* ~~删除线~~ - `~~删除线~~`
+* `Code 标记` - `` `Code 标记` ``
+* [超级链接](https://github.com/5faith/MarkdownView) - `[超级链接](https://github.com/5faith/MarkdownView)`
+* <username@gmail.com> - `[username@gmail.com](mailto:username@gmail.com)`
 
 ## 大标题 - Heading 3
 
@@ -47,12 +47,12 @@
 ```
 *emphasize*    **strong**
 _emphasize_    __strong__
-var a = 1
+var a = 1房东afdsa
 ```
 
 #### 语法高亮支持
 
-如果在 ``` 后面跟随语言名称，可以有语法高亮的效果哦，比如:
+如果在 \`\`\` 后面跟随语言名称，可以有语法高亮的效果哦，比如:
 
 ##### 演示 Go 代码高亮
 
@@ -61,8 +61,13 @@ package main
 
 import "fmt"
 
-func main() {
-	fmt.Println("Hello, 世界")
+
+
+
+
+\dfs安抚s 
+fsda '发达发撒房东啊fd'
+func 	fmt.Println("Hello, 世界")
 }
 ```
 
@@ -84,16 +89,16 @@ public class HelloWorld {
 
 #### 无序列表
 
-- Java
-  - Spring
-    - IoC
-    - AOP
-- Go
-  - gofmt
-  - Wide
-- Node.js
-  - Koa
-  - Express
+* Java
+  * Spring
+    * IoC
+    * AOP
+* Go
+  * gofmt
+  * Wide
+* Node.js
+  * Koa
+  * Express
 
 #### 有序列表
 
@@ -110,9 +115,9 @@ public class HelloWorld {
 
 #### 任务列表
 
-- [X] 发布 Sym
-- [X] 发布 Solo
-- [ ] 预约牙医
+* [x] 发布 Sym
+* [x] 发布 Solo
+* [ ] 预约牙医
 
 ### 表格
 
@@ -150,29 +155,34 @@ console.log('hello')
 
 ### 告警块
 
-> [!NOTE]
+> \[!NOTE]
+>
 > 补充信息。
 
-> [!TIP]
+> \[!TIP]
+>
 > 有用建议。
 
-> [!IMPORTANT]
+> \[!IMPORTANT]
+>
 > 关键信息。
 
-> [!WARNING]
+> \[!WARNING]
+>
 > 需要立即关注的风险。
 
-> [!CAUTION]
+> \[!CAUTION]
+>
 > 危险操作，可能造成不可逆后果。
 
 ### 定义列表
 
 First Term
-: This is the definition of the first term.
+:   This is the definition of the first term.
 
 Second Term
-: This is one definition of the second term.
-: This is another definition of the second term.
+:   This is one definition of the second term.
+:   This is another definition of the second term.
 
 ### 数学公式
 

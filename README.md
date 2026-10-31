@@ -17,6 +17,7 @@
 
 - 右键 Markdown 文件标签页，选择 **Reopen With... / 打开方式... → MarkdownView**；或从命令面板执行 **MarkdownView: Open WYSIWYG Editor**。
 - 需要查看原始 Markdown 时，用 **Reopen With... → Text Editor** 切回默认文本编辑器，两种方式互不干扰。
+- 语法模版见 [examples/local-test.md](./examples/local-test.md)，覆盖插件支持的全部扩展语法与 Mermaid 图表写法，可直接复制为写作模版。
 - 本地调试见 [启动插件](#启动插件)，打包与市场发布见 [PUBLISH.md](./PUBLISH.md)。
 
 ## 界面与渲染细节
