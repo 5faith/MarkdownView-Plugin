@@ -375,6 +375,137 @@ body[data-resizing-outline='true'] {
   background: var(--vscode-list-hoverBackground);
 }
 
+#link-image-toolbar {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  max-width: min(30rem, calc(100vw - 1rem));
+  padding: 0.25rem 0.35rem;
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+  border-radius: 0.4rem;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  color: var(--vscode-editorWidget-foreground, var(--vscode-editor-foreground));
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.3);
+}
+
+#link-image-toolbar[hidden] {
+  display: none;
+}
+
+.link-image-toolbar-url {
+  overflow: hidden;
+  max-width: 17rem;
+  padding: 0 0.35rem;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.8rem;
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.link-image-toolbar-icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  color: var(--vscode-descriptionForeground);
+}
+
+.link-image-toolbar-icon svg,
+#link-image-toolbar button svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#link-image-toolbar button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0.15rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+#link-image-toolbar button:hover,
+#link-image-toolbar button:focus-visible {
+  outline: none;
+  background: var(--vscode-list-hoverBackground);
+}
+
+#selection-format-toolbar {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border, transparent));
+  border-radius: 0.4rem;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  color: var(--vscode-editorWidget-foreground, var(--vscode-editor-foreground));
+  box-shadow: 0 0.35rem 1rem rgba(0, 0, 0, 0.3);
+}
+
+#selection-format-toolbar[hidden] {
+  display: none;
+}
+
+#selection-format-toolbar .selection-format-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7rem;
+  height: 1.7rem;
+  padding: 0 0.25rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+#selection-format-toolbar .selection-format-item svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#selection-format-toolbar .selection-format-item code {
+  padding: 0;
+  background: none;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.75rem;
+}
+
+#selection-format-toolbar .selection-format-item:hover,
+#selection-format-toolbar .selection-format-item:focus-visible {
+  outline: none;
+  background: var(--vscode-list-hoverBackground);
+}
+
+#selection-format-toolbar .selection-format-item.active {
+  color: var(--vscode-focusBorder, #3794ff);
+}
+
 #editor {
   box-sizing: border-box;
   width: 100%;

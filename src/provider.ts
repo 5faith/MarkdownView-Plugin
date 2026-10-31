@@ -124,6 +124,10 @@ export class MarkdownViewProvider implements vscode.CustomTextEditorProvider {
       state.lastKnownContent = document.getText();
       this.postDocumentUpdate(state);
       void vscode.window.showWarningMessage('MarkdownView could not apply an edit to this document.');
+    } else {
+      // Post the recomputed images map so newly referenced relative-path
+      // images resolve in the webview right away.
+      this.postDocumentUpdate(state);
     }
   }
 
