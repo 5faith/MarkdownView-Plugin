@@ -78,7 +78,7 @@ body {
   box-sizing: border-box;
   width: var(--outline-width);
   overflow: auto;
-  padding: 0.75rem 0.55rem;
+  padding: 0 0.55rem 0.75rem;
   border-right: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
   color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground));
@@ -113,9 +113,15 @@ body[data-resizing-outline='true'] {
   user-select: none;
 }
 
+/* 大纲标题行与右侧编辑器顶栏等高（同为 --editor-header-height，border-box），
+   两条底部边框线在同一水平线上；文字垂直居中。 */
 #outline-panel h2 {
-  margin: 0 0 0.5rem;
-  padding: 0.15rem 0.4rem 0.55rem;
+  display: flex;
+  align-items: center;
+  height: var(--editor-header-height);
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 0.4rem;
   border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
   color: var(--vscode-sideBarTitle-foreground, var(--vscode-editor-foreground));
   font-size: 0.85rem;
@@ -126,6 +132,7 @@ body[data-resizing-outline='true'] {
 #outline-list {
   display: grid;
   gap: 0.125rem;
+  padding-top: 0.5rem;
 }
 
 #outline-list .outline-item {
@@ -173,7 +180,9 @@ body[data-resizing-outline='true'] {
   gap: 0.3rem;
   min-height: var(--editor-header-height);
   box-sizing: border-box;
-  padding: 0.25rem 0.45rem;
+  /* 纵向内边距须保证内容不超过 --editor-header-height（border-box），
+     否则顶栏被撑高，与左侧大纲标题的底部分隔线错位 */
+  padding: 0.15rem 0.45rem;
   border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
   background: var(--vscode-editor-background);
 }
