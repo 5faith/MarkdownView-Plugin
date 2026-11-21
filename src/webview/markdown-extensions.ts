@@ -165,25 +165,82 @@ const markdownSyntaxPlugin: MilkdownPlugin = (ctx) => async () => {
 
 const definitionListPlugin = $remark('remarkDefinitionList', () => remarkDefinitionList);
 
+type AlertKind = 'note' | 'tip' | 'important' | 'warning' | 'caution';
+
+const ALERT_TITLES: Record<AlertKind, string> = {
+  note: 'Note',
+  tip: 'Tip',
+  important: 'Important',
+  warning: 'Warning',
+  caution: 'Caution',
+};
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** 图标用线条绘制，深浅主题都吃 currentColor（移植自桌面版 MarkdownView） */
+const ALERT_ICONS: Record<AlertKind, Array<[string, Record<string, string>]>> = {
+  note: [
+    ['circle', { cx: '8', cy: '8', r: '6.2' }],
+    ['path', { d: 'M8 7.2v4M8 4.8v.02' }],
+  ],
+  tip: [
+    ['path', { d: 'M6.1 11.2c-.5-.9-1.6-1.8-1.6-3.6a3.5 3.5 0 017 0c0 1.8-1.1 2.7-1.6 3.6z' }],
+    ['path', { d: 'M6.2 13.2h3.6' }],
+  ],
+  important: [
+    ['rect', { x: '1.9', y: '2.4', width: '12.2', height: '11.2', rx: '2.4' }],
+    ['path', { d: 'M8 5.4v3.4M8 11.3v.02' }],
+  ],
+  warning: [
+    ['path', { d: 'M8 2.3 14.5 13.5H1.5z' }],
+    ['path', { d: 'M8 6.4v3M8 11.6v.02' }],
+  ],
+  caution: [
+    ['path', { d: 'M5.3 2h5.4L14 5.3v5.4L10.7 14H5.3L2 10.7V5.3z' }],
+    ['path', { d: 'M8 5.4v3.4M8 11.3v.02' }],
+  ],
+};
+
+/** 必须用 createElementNS 建 SVG，ProseMirror 的 createElement 只会生成 HTML 未知元素 */
+function alertIcon(kind: AlertKind): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.4');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  for (const [tag, attrs] of ALERT_ICONS[kind]) {
+    const el = document.createElementNS(SVG_NS, tag);
+    for (const [key, value] of Object.entries(attrs)) {
+      el.setAttribute(key, value);
+    }
+    svg.appendChild(el);
+  }
+  return svg;
+}
+
 const markdownviewAlertSchema = $nodeSchema('markdownview_alert', () => ({
   group: 'block',
   content: 'block*',
   defining: true,
   attrs: { kind: { default: 'note' } },
-  parseDOM: [{
-    tag: 'blockquote.markdownview-alert',
-    getAttrs: (dom) => ({
-      kind: (dom as HTMLElement).dataset.alertKind ?? 'note',
-    }),
-  }],
-  toDOM: (node) => [
-    'blockquote',
-    {
-      class: `markdownview-alert markdownview-alert-${node.attrs.kind}`,
-      'data-alert-kind': node.attrs.kind,
-    },
-    0,
-  ],
+  toDOM: (node) => {
+    const kind = node.attrs.kind as AlertKind;
+    const known = kind in ALERT_TITLES ? kind : 'note';
+    return [
+      'blockquote',
+      {
+        class: `markdownview-alert markdownview-alert-${known}`,
+        'data-alert-kind': known,
+      },
+      ['p', { class: 'markdownview-alert-title' }, alertIcon(known), ['span', {}, ALERT_TITLES[known]]],
+      ['div', { class: 'markdownview-alert-body' }, 0],
+    ];
+  },
   parseMarkdown: {
     match: (node) => node.type === 'markdownviewAlert',
     runner: (state, node, type) => {
@@ -285,12 +342,16 @@ const markdownviewDetailsView = $view(markdownviewDetailsSchema.node, () =>
       }
       window.requestAnimationFrame(() => {
         const latestNode = view.state.doc.nodeAt(position);
-        if (latestNode?.type === currentNode.type && latestNode.attrs.open !== dom.open) {
-          view.dispatch(view.state.tr.setNodeMarkup(position, undefined, {
-            ...latestNode.attrs,
-            open: dom.open,
-          }));
+        if (!latestNode || latestNode.type.name !== 'markdownview_details') {
+          return;
         }
+        if (latestNode.attrs.open === dom.open) {
+          return;
+        }
+        view.dispatch(view.state.tr.setNodeMarkup(position, undefined, {
+          ...latestNode.attrs,
+          open: dom.open,
+        }));
       });
     };
     dom.addEventListener('toggle', handleToggle);
@@ -307,6 +368,12 @@ const markdownviewDetailsView = $view(markdownviewDetailsSchema.node, () =>
           dom.open = nextNode.attrs.open;
         }
         return true;
+      },
+      // 点击 <summary> 翻转的 open 属性由上面的 toggle 处理器写回节点 attr，
+      // 不能让 ProseMirror 的 DOMObserver 把它当成内容变化重新解析，
+      // 否则展开/收起会被再次翻转（桌面版已验证的防护）。
+      ignoreMutation(mutation) {
+        return mutation.type === 'attributes' && mutation.attributeName === 'open';
       },
       destroy() {
         dom.removeEventListener('toggle', handleToggle);

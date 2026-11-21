@@ -15,3 +15,5 @@ pnpm-workspace.yaml
 node_modules/**
 coverage/**
 examples/**
+harness/**
+.zcode/**

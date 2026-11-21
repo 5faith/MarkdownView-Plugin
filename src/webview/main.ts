@@ -1355,6 +1355,13 @@ updateModeControls();
 function postChange(markdown: string): void {
   latestMarkdown = markdown;
   window.requestAnimationFrame(updateOutline);
+  if (mode === 'readonly') {
+    // 只读模式不向宿主写回：折叠块展开/收起等纯界面状态只留在 webview 内部。
+    // 若照常发送 change，宿主会拒绝写入并回传旧文档触发 replaceAll，把折叠
+    // 状态回退（表现为“点展开先展开后折叠”）。宿主的外部修改仍会照常覆盖。
+    window.clearTimeout(changeTimer);
+    return;
+  }
   if (markdown === lastAppliedMarkdown) {
     return;
   }

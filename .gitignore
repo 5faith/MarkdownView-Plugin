@@ -48,7 +48,6 @@ desktop.ini
 
 
 #ignore
-.trae
 .opencode
 .omo
 openspec
@@ -57,8 +56,10 @@ openspec
 .reasonix/
 .omp/
 .kilo/
-!.kilo/skills/
-.zcode/
 .operator/
 .openchamber/
 .mimosa/
+
+# Browser harness (local verification only)
+harness/
+.zcode/

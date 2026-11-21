@@ -12,6 +12,10 @@
   --editor-header-height: 2.8rem;
   --editor-min-width: 40rem;
 
+  /* 正文排版节奏（对齐桌面版 Drake 排版契约） */
+  --p-spacing: 0.8rem;
+  --text-line-height: 1.6;
+
   /* Crepe 结构样式引用的主题变量未随包引入，这里映射到 VS Code 主题变量。 */
   --crepe-base-font-size: var(--text-size, 14px);
   --crepe-font-default: var(--vscode-font-family);
@@ -525,6 +529,112 @@ body[data-resizing-outline='true'] {
   color: var(--vscode-editor-foreground);
 }
 
+/* ─────────── 正文排版（移植桌面版 Drake 排版契约，映射 VS Code 主题变量） ─────────── */
+
+#editor .milkdown {
+  font-size: 1rem;
+  line-height: var(--text-line-height);
+  font-feature-settings: 'liga' 1, 'calt' 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 标题尺度对齐 Typora 默认主题：2.25 / 1.75 / 1.5 / 1.25 / 1 / 1 rem。
+   选择器必须带 .ProseMirror：Crepe reset 用 `.milkdown .ProseMirror hN`（em 尺度），
+   特异性不足会被它覆盖。 */
+#editor .milkdown .ProseMirror h1 { font-size: 2.25rem; line-height: 1.25; }
+#editor .milkdown .ProseMirror h2 { font-size: 1.75rem; line-height: 1.3; }
+#editor .milkdown .ProseMirror h3 { font-size: 1.5rem; }
+#editor .milkdown .ProseMirror h4 { font-size: 1.25rem; }
+#editor .milkdown .ProseMirror h5,
+#editor .milkdown .ProseMirror h6 { font-size: 1rem; }
+
+/* 标题级别角标：行首小字显示 H1–H6，便于识别层级；只读（预览）模式不显示 */
+#editor .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6)::before {
+  display: inline-block;
+  margin-right: 0.571rem;
+  padding: 0 0.357rem;
+  border-radius: 0.286rem;
+  background: var(--vscode-toolbar-hoverBackground, transparent);
+  color: var(--vscode-descriptionForeground, inherit);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 0.714rem;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+
+#editor .milkdown .ProseMirror h1::before { content: 'H1'; }
+#editor .milkdown .ProseMirror h2::before { content: 'H2'; }
+#editor .milkdown .ProseMirror h3::before { content: 'H3'; }
+#editor .milkdown .ProseMirror h4::before { content: 'H4'; }
+#editor .milkdown .ProseMirror h5::before { content: 'H5'; }
+#editor .milkdown .ProseMirror h6::before { content: 'H6'; }
+
+#editor:not([data-editable='true']) .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6)::before {
+  display: none;
+}
+
+/* 段落/块间距节奏统一消费 --p-spacing */
+#editor .milkdown p,
+#editor .milkdown ul,
+#editor .milkdown ol,
+#editor .milkdown table {
+  margin: var(--p-spacing) 0;
+}
+
+/* 引用块（告警块是 blockquote.markdownview-alert，由下方专属样式接管，需排除） */
+#editor .milkdown blockquote:not(.markdownview-alert) {
+  border-left: 0.25rem solid var(--vscode-textBlockQuote-border, var(--vscode-panel-border, var(--vscode-widget-border, transparent)));
+  background: var(--vscode-textBlockQuote-background, transparent);
+  color: var(--vscode-editor-foreground);
+  padding: 0.2rem 1rem;
+  border-radius: 0 0.429rem 0.429rem 0;
+}
+
+#editor .milkdown a {
+  color: var(--vscode-textLink-foreground, var(--vscode-focusBorder));
+}
+
+#editor .milkdown a:hover {
+  color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground, var(--vscode-focusBorder)));
+}
+
+#editor .milkdown pre {
+  background: var(--vscode-textCodeBlock-background, var(--vscode-editor-background));
+  color: var(--vscode-editor-foreground);
+  border-radius: 0.571rem;
+  padding: 0.8rem 1rem;
+  overflow-x: auto;
+  line-height: var(--text-line-height);
+}
+
+#editor .milkdown :not(pre) > code {
+  color: var(--vscode-textPreformat-foreground, var(--vscode-editor-foreground));
+  background: var(--vscode-textCodeBlock-background, transparent);
+  border-radius: 0.286rem;
+  padding: 0.1em 0.35em;
+  font-family: var(--vscode-editor-font-family, monospace);
+}
+
+/* 列表符号垂直对齐：Crepe 的符号盒写死 32px 高，而正文行高是 1.6，
+   圆点会比文字高约 9px；盒高改成一行，并让出段落 margin-top */
+#editor .milkdown .milkdown-list-item-block li > .label-wrapper {
+  height: calc(1em * var(--text-line-height));
+  margin-top: calc(var(--p-spacing) + 0.2em);
+}
+
+#editor .milkdown .milkdown-list-item-block li .label-wrapper .label {
+  height: 100%;
+  padding: 0;
+}
+
+#editor .milkdown hr {
+  border: none;
+  border-top: 0.1em solid var(--vscode-editorWidget-border, var(--vscode-panel-border, var(--vscode-widget-border, transparent)));
+  margin: 1.6em 0;
+}
+
 #source-editor {
   display: block;
   box-sizing: border-box;
@@ -633,13 +743,15 @@ body[data-resizing-outline='true'] {
 
 #editor img {
   max-width: 100%;
+  border-radius: 0.429rem;
 }
 
 #editor .milkdown-details,
 #editor .markdownview-details {
   overflow: hidden;
+  margin: var(--p-spacing) 0;
   border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, transparent));
-  border-radius: 0.35rem;
+  border-radius: 0.429rem;
   background: var(--vscode-sideBar-background, var(--vscode-editor-background));
 }
 
@@ -647,12 +759,18 @@ body[data-resizing-outline='true'] {
 #editor .markdownview-details > summary {
   padding: 0.5rem 0.75rem;
   color: var(--vscode-sideBarTitle-foreground, var(--vscode-editor-foreground));
+  font-weight: 600;
   cursor: pointer;
+  user-select: none;
 }
 
 #editor .markdownview-details > :not(summary) {
   margin-right: 0.75rem;
   margin-left: 0.75rem;
+}
+
+#editor .markdownview-details > :not(summary):first-of-type {
+  margin-top: 0.429rem;
 }
 
 #editor dl {
@@ -675,40 +793,92 @@ body[data-resizing-outline='true'] {
   border-radius: 0.35rem;
 }
 
+#editor .milkdown table,
+#editor .milkdown-table-block table {
+  border-collapse: collapse;
+}
+
 #editor .milkdown-table-block th,
 #editor .milkdown-table-block td {
   border-color: color-mix(in srgb, var(--vscode-editor-foreground), transparent 60%);
+  padding: 0.35rem 0.9rem;
+  font-size: 0.95rem;
+  text-align: left;
 }
 
 #editor .milkdown-table-block th {
   background: color-mix(in srgb, var(--vscode-editor-foreground), transparent 94%);
 }
 
+/* 斑马纹：Crepe 表格块是单个 tbody（表头行也在其中，无 thead 拆分），
+   表头占第 1 个 child，数据行从 2n+3 起隔行着色 */
+#editor .milkdown-table-block tbody tr:nth-child(2n + 3) td {
+  background: color-mix(in srgb, var(--vscode-editor-foreground), transparent 96%);
+}
+
 #editor .markdownview-alert {
-  margin: 1rem 0;
-  padding: 0.25rem 0.75rem;
-  border-left: 3px solid var(--vscode-focusBorder);
-  background: var(--vscode-textBlockQuote-background, transparent);
+  margin: var(--p-spacing) 0;
+  padding: 0.571rem 0.857rem;
+  border-left: 0.286rem solid var(--vscode-notificationsInfoIcon-foreground, var(--vscode-focusBorder));
+  background: color-mix(in srgb, var(--vscode-notificationsInfoIcon-foreground, var(--vscode-focusBorder)), transparent 92%);
+  border-radius: 0 0.429rem 0.429rem 0;
+}
+
+#editor .markdownview-alert .markdownview-alert-title {
+  display: flex;
+  align-items: center;
+  gap: 0.357rem;
+  margin-bottom: 0.214rem;
+  font-weight: 600;
+}
+
+#editor .markdownview-alert .markdownview-alert-title svg {
+  flex: none;
 }
 
 #editor .markdownview-alert-note {
-  border-color: var(--vscode-notificationsInfoIcon-foreground, var(--vscode-focusBorder));
+  border-left-color: var(--vscode-notificationsInfoIcon-foreground, var(--vscode-focusBorder));
+  background: color-mix(in srgb, var(--vscode-notificationsInfoIcon-foreground, var(--vscode-focusBorder)), transparent 92%);
+}
+
+#editor .markdownview-alert-note .markdownview-alert-title {
+  color: var(--vscode-notificationsInfoIcon-foreground, var(--vscode-focusBorder));
 }
 
 #editor .markdownview-alert-tip {
-  border-color: var(--vscode-testing-iconPassed, var(--vscode-focusBorder));
+  border-left-color: var(--vscode-testing-iconPassed, var(--vscode-focusBorder));
+  background: color-mix(in srgb, var(--vscode-testing-iconPassed, var(--vscode-focusBorder)), transparent 92%);
+}
+
+#editor .markdownview-alert-tip .markdownview-alert-title {
+  color: var(--vscode-testing-iconPassed, var(--vscode-focusBorder));
 }
 
 #editor .markdownview-alert-important {
-  border-color: var(--vscode-symbolIcon-functionForeground, var(--vscode-focusBorder));
+  border-left-color: var(--vscode-symbolIcon-functionForeground, var(--vscode-focusBorder));
+  background: color-mix(in srgb, var(--vscode-symbolIcon-functionForeground, var(--vscode-focusBorder)), transparent 92%);
+}
+
+#editor .markdownview-alert-important .markdownview-alert-title {
+  color: var(--vscode-symbolIcon-functionForeground, var(--vscode-focusBorder));
 }
 
 #editor .markdownview-alert-warning {
-  border-color: var(--vscode-editorWarning-foreground, var(--vscode-focusBorder));
+  border-left-color: var(--vscode-editorWarning-foreground, var(--vscode-focusBorder));
+  background: color-mix(in srgb, var(--vscode-editorWarning-foreground, var(--vscode-focusBorder)), transparent 92%);
+}
+
+#editor .markdownview-alert-warning .markdownview-alert-title {
+  color: var(--vscode-editorWarning-foreground, var(--vscode-focusBorder));
 }
 
 #editor .markdownview-alert-caution {
-  border-color: var(--vscode-editorError-foreground, var(--vscode-focusBorder));
+  border-left-color: var(--vscode-editorError-foreground, var(--vscode-focusBorder));
+  background: color-mix(in srgb, var(--vscode-editorError-foreground, var(--vscode-focusBorder)), transparent 92%);
+}
+
+#editor .markdownview-alert-caution .markdownview-alert-title {
+  color: var(--vscode-editorError-foreground, var(--vscode-focusBorder));
 }
 
 #editor .mermaid-diagram {
