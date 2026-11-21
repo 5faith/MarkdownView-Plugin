@@ -888,6 +888,16 @@ body[data-resizing-outline='true'] {
   background: var(--vscode-editor-background);
 }
 
+/* 图表内部（含节点标签 foreignObject 里的 HTML）是渲染结果，正文排版节奏规则
+   不得渗入：标签 <p> 被加上段距后会被 foreignObject 视口裁剪，表现为节点内
+   文字只显示部分笔画。 */
+#editor .mermaid-diagram p,
+#editor .mermaid-diagram ul,
+#editor .mermaid-diagram ol,
+#editor .mermaid-diagram table {
+  margin: 0;
+}
+
 #editor .mermaid-diagram-preview {
   overflow-x: auto;
   padding: 1rem;
