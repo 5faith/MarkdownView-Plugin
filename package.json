@@ -17,6 +17,14 @@
   "categories": [
     "Other"
   ],
+  "keywords": [
+    "markdown",
+    "editor",
+    "viewer",
+    "wysiwyg",
+    "mermaid",
+    "preview"
+  ],
   "main": "./dist/extension.js",
   "activationEvents": [
     "onCustomEditor:markdownView.editor",
